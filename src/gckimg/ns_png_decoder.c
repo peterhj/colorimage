@@ -7,7 +7,7 @@
 #include "image.h"
 #include "qcms/qcms.h"
 
-#include <png.h>
+#include "png.h"
 
 #include <assert.h>
 #include <stdint.h>
@@ -63,9 +63,7 @@ static qcms_profile *_png_get_color_profile(png_structp png, png_infop info, int
   // First try to see if iCCP chunk is present
   if (png_get_valid(png, info, PNG_INFO_iCCP)) {
     png_uint_32 profileLen;
-    // TODO: revert `profileData` to `png_bytep` with new libpng version.
-    png_charp profileData;
-    //png_bytep profileData;
+    png_bytep profileData;
     png_charp profileName;
     int compression;
 
@@ -234,10 +232,9 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
     }
   }
 
-  // TODO: upgrade to newer libpng to use this.
-  /*if (16 == bit_depth) {
+  if (16 == bit_depth) {
     png_set_scale_16(ctx->png);
-  }*/
+  }
 
   qcms_data_type in_type = QCMS_DATA_RGBA_8;
   uint32_t intent = (uint32_t)(-1);
