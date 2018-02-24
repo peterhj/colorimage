@@ -3,7 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "ns_png_decoder.h"
-#include "common.h"
+#include "color_mgmt.h"
+#include "image.h"
 #include "qcms/qcms.h"
 
 #include <png.h>
@@ -11,6 +12,14 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
+
+// limit image dimensions (bug #251381, #591822, #967656, and #1283961)
+#ifndef MOZ_PNG_MAX_WIDTH
+#  define MOZ_PNG_MAX_WIDTH 0x7fffffff // Unlimited
+#endif
+#ifndef MOZ_PNG_MAX_HEIGHT
+#  define MOZ_PNG_MAX_HEIGHT 0x7fffffff // Unlimited
+#endif
 
 #ifdef PNG_HANDLE_AS_UNKNOWN_SUPPORTED
 static const int num_color_chunks = 2;
@@ -46,19 +55,127 @@ static void PNGAPI warning_callback(png_structp png, png_const_charp msg) {
   (void)msg;
 }
 
+// Adapted from http://www.littlecms.com/pngchrm.c example code
 static qcms_profile *_png_get_color_profile(png_structp png, png_infop info, int color_type, qcms_data_type *in_type, uint32_t *intent) {
-  (void)png;
-  (void)info;
-  (void)color_type;
-  (void)in_type;
-  (void)intent;
-  assert(0 && "unimplemented");
+  qcms_profile* profile = NULL;
+  *intent = QCMS_INTENT_PERCEPTUAL; // Our default
+
+  // First try to see if iCCP chunk is present
+  if (png_get_valid(png, info, PNG_INFO_iCCP)) {
+    png_uint_32 profileLen;
+    // TODO: revert `profileData` to `png_bytep` with new libpng version.
+    png_charp profileData;
+    //png_bytep profileData;
+    png_charp profileName;
+    int compression;
+
+    png_get_iCCP(png, info, &profileName, &compression,
+                 &profileData, &profileLen);
+
+    profile = qcms_profile_from_memory((char*)profileData, profileLen);
+    if (profile) {
+      uint32_t profileSpace = qcms_profile_get_color_space(profile);
+
+      int mismatch = 0;
+      if (color_type & PNG_COLOR_MASK_COLOR) {
+        if (profileSpace != icSigRgbData) {
+          mismatch = 1;
+        }
+      } else {
+        if (profileSpace == icSigRgbData) {
+          png_set_gray_to_rgb(png);
+        } else if (profileSpace != icSigGrayData) {
+          mismatch = 1;
+        }
+      }
+
+      if (mismatch) {
+        qcms_profile_release(profile);
+        profile = NULL;
+      } else {
+        *intent = qcms_profile_get_rendering_intent(profile);
+      }
+    }
+  }
+
+  // Check sRGB chunk
+  if (!profile && png_get_valid(png, info, PNG_INFO_sRGB)) {
+    profile = qcms_profile_sRGB();
+
+    if (profile) {
+      int fileIntent;
+      png_set_gray_to_rgb(png);
+      png_get_sRGB(png, info, &fileIntent);
+      uint32_t map[] = { QCMS_INTENT_PERCEPTUAL,
+                         QCMS_INTENT_RELATIVE_COLORIMETRIC,
+                         QCMS_INTENT_SATURATION,
+                         QCMS_INTENT_ABSOLUTE_COLORIMETRIC };
+      assert(fileIntent >= 0 && fileIntent < 4);
+      *intent = map[fileIntent];
+    }
+  }
+
+  // Check gAMA/cHRM chunks
+  if (!profile &&
+       png_get_valid(png, info, PNG_INFO_gAMA) &&
+       png_get_valid(png, info, PNG_INFO_cHRM)) {
+    qcms_CIE_xyYTRIPLE primaries;
+    qcms_CIE_xyY whitePoint;
+
+    png_get_cHRM(png, info,
+                 &whitePoint.x, &whitePoint.y,
+                 &primaries.red.x,   &primaries.red.y,
+                 &primaries.green.x, &primaries.green.y,
+                 &primaries.blue.x,  &primaries.blue.y);
+    whitePoint.Y =
+      primaries.red.Y = primaries.green.Y = primaries.blue.Y = 1.0;
+
+    double gammaOfFile;
+
+    png_get_gAMA(png, info, &gammaOfFile);
+
+    profile = qcms_profile_create_rgb_with_gamma(whitePoint, primaries,
+                                                 1.0/gammaOfFile);
+
+    if (profile) {
+      png_set_gray_to_rgb(png);
+    }
+  }
+
+  if (profile) {
+    uint32_t profileSpace = qcms_profile_get_color_space(profile);
+    if (profileSpace == icSigGrayData) {
+      if (color_type & PNG_COLOR_MASK_ALPHA) {
+        *in_type = QCMS_DATA_GRAYA_8;
+      } else {
+        *in_type = QCMS_DATA_GRAY_8;
+      }
+    } else {
+      if (color_type & PNG_COLOR_MASK_ALPHA ||
+          png_get_valid(png, info, PNG_INFO_tRNS)) {
+        *in_type = QCMS_DATA_RGBA_8;
+      } else {
+        *in_type = QCMS_DATA_RGB_8;
+      }
+    }
+  }
+
+  return profile;
 }
 
 static void _png_do_gamma_correction(png_structp png, png_infop info) {
-  (void)png;
-  (void)info;
-  assert(0 && "unimplemented");
+  // Sets up gamma pre-correction in libpng before our callback gets called.
+  // We need to do this if we don't end up with a CMS profile.
+  double gamma;
+  if (png_get_gAMA(png, info, &gamma)) {
+    if (gamma <= 0.0 || gamma > 21474.83) {
+      gamma = 0.45455;
+      png_set_gAMA(png, info, gamma);
+    }
+    png_set_gamma(png, 2.2, gamma);
+  } else {
+    png_set_gamma(png, 2.2, 0.45455);
+  }
 }
 
 static void PNGAPI info_callback(png_structp _png, png_infop _info) {
@@ -82,7 +199,7 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
   // Post our size to the superclass.
   ctx->width = width;
   ctx->height = height;
-  ctx->callbacks.init_size(ctx->writer, width, height);
+  ctx->depth = bit_depth;
 
   // TODO: check size limits.
 
@@ -117,19 +234,16 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
     }
   }
 
+  // TODO: upgrade to newer libpng to use this.
   /*if (16 == bit_depth) {
     png_set_scale_16(ctx->png);
   }*/
 
-  // TODO: color management.
-
   qcms_data_type in_type = QCMS_DATA_RGBA_8;
-  uint32_t intent = -1;
-  uint32_t p_intent;
+  uint32_t intent = (uint32_t)(-1);
   if (ctx->color_mgmt) {
-    // TODO: intent?
-    //intent = -1;
-    ctx->profile = _png_get_color_profile(
+    uint32_t p_intent;
+    ctx->in_profile = _png_get_color_profile(
         ctx->png,
         ctx->info,
         color_type,
@@ -140,7 +254,7 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
       intent = p_intent;
     }
   }
-  if (ctx->profile != NULL && ctx->color_mgmt) {
+  if (ctx->in_profile != NULL && ctx->color_mgmt) {
     qcms_data_type out_type;
 
     if (color_type & PNG_COLOR_MASK_ALPHA || num_trans) {
@@ -149,11 +263,10 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
       out_type = QCMS_DATA_RGB_8;
     }
 
-    // TODO: need to pass an output color profile, defaut should be sRGB.
     ctx->transform = qcms_transform_create(
-        ctx->profile,
+        ctx->in_profile,
         in_type,
-        NULL, // TODO
+        ctx->cm->out_profile,
         out_type,
         (qcms_intent)(intent));
   } else {
@@ -161,11 +274,11 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
 
     // only do gamma correction if CMS isn't entirely disabled
     if (ctx->color_mgmt) {
-      // TODO: do gamma correction.
       _png_do_gamma_correction(ctx->png, ctx->info);
     }
 
-    // TODO: `color_mgmt` on is currently equal to eCMSMode=2.
+    // NOTE: `color_mgmt` on is currently equal to eCMSMode=2,
+    // so do not force a color space transform.
   }
 
   // Let libpng expand interlaced images.
@@ -178,7 +291,10 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
   // members and whatnot, after which we can get channels, rowbytes, etc.
   png_read_update_info(ctx->png, ctx->info);
   channels = png_get_channels(ctx->png, ctx->info);
+
+  // Post our size to the superclass.
   ctx->channels = channels;
+  ctx->callbacks.init_size(ctx->writer, width, height, channels);
 
   //---------------------------------------------------------------//
   // copy PNG info into imagelib structs (formerly png_set_dims()) //
@@ -190,6 +306,7 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
 
   // NOTE: The original code called "CreateFrame" here but we do not need to,
   // as `ctx->callbacks.init_size()` is sufficient.
+  ctx->pass = 0;
 
   if (ctx->transform && (channels <= 2 || is_interlaced)) {
     uint32_t bpp[] = { 0, 3, 4, 3, 4 };
@@ -268,19 +385,18 @@ static void PNGAPI row_callback(png_structp _png, png_bytep new_row, png_uint_32
    * old row and the new row.
    */
 
-  // TODO
-  (void)pass;
-
   struct NSPngDecoderCtx *ctx = (struct NSPngDecoderCtx *)(png_get_progressive_ptr(_png));
 
-  /*while (pass > ctx->pass) {
+  while (pass > ctx->pass) {
     // Advance to the next pass. We may have to do this multiple times because
     // libpng will skip passes if the image is so small that no pixels have
     // changed on a given pass, but ADAM7InterpolatingFilter needs to be reset
     // once for every pass to perform interpolation properly.
-    // TODO
+
+    // NOTE: No need to force the writer to reset to the first row,
+    // since `write_row` passes the row index.
     ctx->pass++;
-  }*/
+  }
 
   const png_uint_32 height = ctx->height;
   if (row_num >= height) {
@@ -311,15 +427,14 @@ static void PNGAPI row_callback(png_structp _png, png_bytep new_row, png_uint_32
 }
 
 static void PNGAPI end_callback(png_structp _png, png_infop _info) {
-  // TODO
+  // TODO: this is for error checking.
   (void)_png;
   (void)_info;
 }
 
-/*static void _wrapped_ns_png_create_frame(struct NSPngDecoderCtx *ctx) {
-}*/
-
-void wrapped_ns_png_init(struct NSPngDecoderCtx *ctx, int color_mgmt) {
+void gckimg_ns_png_init(struct NSPngDecoderCtx *ctx, int color_mgmt) {
+  // Initialize the container's source image header
+  // Always decode to 24 bit pixdepth
   ctx->png = png_create_read_struct(
       PNG_LIBPNG_VER_STRING,
       NULL,
@@ -341,6 +456,7 @@ void wrapped_ns_png_init(struct NSPngDecoderCtx *ctx, int color_mgmt) {
 #endif
 
 #ifdef PNG_SET_USER_LIMITS_SUPPORTED
+  png_set_user_limits(ctx->png, MOZ_PNG_MAX_WIDTH, MOZ_PNG_MAX_HEIGHT);
   /*if (color_mgmt) {
     png_set_chunk_malloc_max(ctx->png, 4000000L);
   }*/
@@ -369,7 +485,7 @@ void wrapped_ns_png_init(struct NSPngDecoderCtx *ctx, int color_mgmt) {
 #endif
 }
 
-void wrapped_ns_png_cleanup(struct NSPngDecoderCtx *ctx) {
+void gckimg_ns_png_cleanup(struct NSPngDecoderCtx *ctx) {
   if (ctx->png != NULL) {
     png_destroy_read_struct(&ctx->png, &ctx->info, NULL);
   }
@@ -379,8 +495,8 @@ void wrapped_ns_png_cleanup(struct NSPngDecoderCtx *ctx) {
   if (ctx->interlace_buf != NULL) {
     free(ctx->interlace_buf);
   }
-  if (ctx->profile != NULL) {
-    qcms_profile_release(ctx->profile);
+  if (ctx->in_profile != NULL) {
+    qcms_profile_release(ctx->in_profile);
     // mTransform belongs to us only if mInProfile is non-null
     if (ctx->transform != NULL) {
       qcms_transform_release(ctx->transform);
@@ -388,10 +504,11 @@ void wrapped_ns_png_cleanup(struct NSPngDecoderCtx *ctx) {
   }
 }
 
-void wrapped_ns_png_decode(
+void gckimg_ns_png_decode(
     struct NSPngDecoderCtx *ctx,
+    struct ColorMgmtCtx *cm,
     const uint8_t *buf, size_t buf_len,
-    void *writer, struct RasterWriterCallbacks callbacks)
+    void *writer, struct ImageWriterCallbacks callbacks)
 {
   // libpng uses setjmp/longjmp for error handling.
   if (setjmp(png_jmpbuf(ctx->png))) {
@@ -399,6 +516,7 @@ void wrapped_ns_png_decode(
     return;
   }
 
+  ctx->cm = cm;
   ctx->writer = writer;
   ctx->callbacks = callbacks;
 

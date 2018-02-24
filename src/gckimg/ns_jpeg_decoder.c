@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "ns_jpeg_decoder.h"
-#include "common.h"
+#include "image.h"
 
 #include <assert.h>
 #include <setjmp.h>
@@ -43,7 +43,7 @@ METHODDEF(void) term_source(j_decompress_ptr jd) {
   (void)jd;
 }
 
-void wrapped_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt) {
+void gckimg_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt) {
   (void)color_mgmt; // TODO
   ctx->info.client_data = ctx;
 
@@ -78,7 +78,7 @@ void wrapped_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt) {
   }
 }
 
-void wrapped_ns_jpeg_cleanup(struct NSJpegDecoderCtx *ctx) {
+void gckimg_ns_jpeg_cleanup(struct NSJpegDecoderCtx *ctx) {
   // Step 8: release JPEG decompression object.
   ctx->info.src = NULL;
   jpeg_destroy_decompress(&ctx->info);
@@ -87,10 +87,10 @@ void wrapped_ns_jpeg_cleanup(struct NSJpegDecoderCtx *ctx) {
   ctx->back_buffer = NULL;
 }
 
-void wrapped_ns_jpeg_decode(
+void gckimg_ns_jpeg_decode(
     struct NSJpegDecoderCtx *ctx,
     const uint8_t *buf, size_t buf_len,
-    void *writer, struct RasterWriterCallbacks callbacks)
+    void *writer, struct ImageWriterCallbacks callbacks)
 {
   // TODO
   (void)writer;

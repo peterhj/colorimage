@@ -1,11 +1,10 @@
-extern crate turbojpeg;
-
 use decoders::*;
 use decoders::jpeg::*;
 use decoders::png::*;
-use ffi::wrapped::{RasterWriterCallbacks};
+use ffi::gckimg::{ImageWriterCallbacks};
 
 use std::collections::{HashSet};
+use std::os::raw::{c_void};
 use std::str::{from_utf8};
 
 pub mod decoders;
@@ -46,13 +45,61 @@ pub fn guess_image_format_from_signature(buf: &[u8]) -> Option<ImageFormat> {
 }
 
 pub struct RasterImage {
-  rows: Vec<Vec<u8>>,
+  width:    usize,
+  height:   usize,
+  channels: usize,
+  data:     Vec<Vec<u8>>,
 }
 
-impl RasterWriter for RasterImage {
-  fn callbacks() -> RasterWriterCallbacks {
-    // TODO
-    unimplemented!();
+pub unsafe extern "C" fn raster_image_init_size(img_p: *mut c_void, width: usize, height: usize, channels: usize) {
+  println!("DEBUG: RasterImage: init size: {} {} {}",
+      width, height, channels);
+  assert!(!img_p.is_null());
+  let mut img = unsafe { &mut *(img_p as *mut RasterImage) };
+  img.width = width;
+  img.height = height;
+  img.channels = channels;
+  img.data.clear();
+  for _ in 0 .. height {
+    let mut row = Vec::with_capacity(width * channels);
+    for _ in 0 .. width * channels {
+      row.push(0);
+    }
+    img.data.push(row);
+  }
+}
+
+pub unsafe extern "C" fn raster_image_write_row(img_p: *mut c_void, row_idx: usize, row_data: *const u8, row_size: usize) {
+  // TODO
+  println!("DEBUG: RasterImage: write row: {} {}",
+      row_idx, row_size);
+  assert!(!img_p.is_null());
+}
+
+impl ImageWriter for RasterImage {
+  fn callbacks() -> ImageWriterCallbacks {
+    ImageWriterCallbacks{
+      init_size:    Some(raster_image_init_size),
+      write_row:    Some(raster_image_write_row),
+    }
+  }
+}
+
+impl RasterImage {
+  pub fn new() -> Self {
+    RasterImage{
+      width:    0,
+      height:   0,
+      channels: 0,
+      data:     vec![],
+    }
+  }
+}
+
+pub fn decode_png_image(buf: &[u8], writer: &mut RasterImage) -> Result<(), ()> {
+  match NSPngDecoder::new(true).decode(buf, writer) {
+    Ok(_) => Ok(()),
+    Err(_) => Err(()),
   }
 }
 
@@ -73,6 +120,8 @@ pub fn decode_image(buf: &[u8], writer: &mut RasterImage) -> Result<(), (Option<
           Err(_) => {}
         }
       }
+      /*ImageFormat::Gif => {
+      }*/
       _ => {}
     }
     tried_formats = Some(HashSet::new());

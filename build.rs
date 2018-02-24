@@ -10,19 +10,19 @@ fn main() {
   let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
   println!("cargo:rustc-link-search=native={}", out_dir.display());
-  println!("cargo:rustc-link-lib=static=image_io_wrapped");
-  //println!("cargo:rustc-link-lib=static=png_native");
+  println!("cargo:rustc-link-lib=static=gckimg_native");
+  // TODO: link to included libpng and libjpeg.
   println!("cargo:rustc-link-lib=png");
   println!("cargo:rustc-link-lib=z");
 
   println!("cargo:rerun-if-changed=build.rs");
   println!("cargo:rerun-if-changed=wrapped.h");
-  println!("cargo:rerun-if-changed=wrapped/ns_jpeg_decoder.c");
-  println!("cargo:rerun-if-changed=wrapped/ns_jpeg_decoder.h");
-  println!("cargo:rerun-if-changed=wrapped/ns_png_decoder.c");
-  println!("cargo:rerun-if-changed=wrapped/ns_png_decoder.h");
+  println!("cargo:rerun-if-changed=src/gckimg/ns_jpeg_decoder.c");
+  println!("cargo:rerun-if-changed=src/gckimg/ns_jpeg_decoder.h");
+  println!("cargo:rerun-if-changed=src/gckimg/ns_png_decoder.c");
+  println!("cargo:rerun-if-changed=src/gckimg/ns_png_decoder.h");
 
-  // TODO: build libpng.
+  // TODO: build libjpeg and libpng.
 
   cc::Build::new()
     .opt_level(2)
@@ -31,42 +31,48 @@ fn main() {
     .flag("-fno-strict-aliasing")
     .flag("-Wall")
     .flag("-Werror")
-    .include("wrapped")
-    //.include("third_party/libjpeg-turbo")
-    //.include("third_party/libpng")
-    .file("wrapped/color_mgmt.c")
-    .file("wrapped/ns_jpeg_decoder.c")
-    .file("wrapped/ns_png_decoder.c")
-    .file("wrapped/qcms/chain.c")
-    .file("wrapped/qcms/iccread.c")
-    .file("wrapped/qcms/matrix.c")
-    .file("wrapped/qcms/transform.c")
-    .file("wrapped/qcms/transform_util.c")
+    .include("src/gckimg")
+    //.include("src/gckimg/libjpeg")
+    //.include("src/gckimg/libpng")
+    .file("src/gckimg/color_mgmt.c")
+    .file("src/gckimg/ns_jpeg_decoder.c")
+    .file("src/gckimg/ns_png_decoder.c")
+    .file("src/gckimg/qcms/chain.c")
+    .file("src/gckimg/qcms/iccread.c")
+    .file("src/gckimg/qcms/matrix.c")
+    .file("src/gckimg/qcms/transform.c")
+    // TODO: target feature test?
+    .file("src/gckimg/qcms/transform-sse1.c")
+    .file("src/gckimg/qcms/transform-sse2.c")
+    .file("src/gckimg/qcms/transform_util.c")
     // TODO: platform-dependent vectorized sources.
-    .compile("libimage_io_wrapped.a");
+    .compile("libgckimg_native.a");
 
   Command::new("rm")
     .current_dir(&out_dir)
     .arg("-f")
-    .arg(out_dir.join("wrapped_bind.rs").as_os_str().to_str().unwrap())
+    .arg(out_dir.join("gckimg_bind.rs").as_os_str().to_str().unwrap())
     .status().unwrap();
 
   bindgen::Builder::default()
     .header("wrapped.h")
-    .clang_arg("-Iwrapped")
-    //.clang_arg("-Ithird_party/libjpeg-turbo")
-    //.clang_arg("-Ithird_party/libpng")
-    .whitelist_type("RasterWriterCallbacks")
+    .clang_arg("-Isrc/gckimg")
+    //.clang_arg("-Isrc/gckimg/libjpeg")
+    //.clang_arg("-Isrc/gckimg/libpng")
+    .whitelist_type("ColorMgmtCtx")
+    .whitelist_type("ImageWriterCallbacks")
     .whitelist_type("NSJpegDecoderCtx")
     .whitelist_type("NSPngDecoderCtx")
-    .whitelist_function("wrapped_ns_jpeg_init")
-    .whitelist_function("wrapped_ns_jpeg_cleanup")
-    .whitelist_function("wrapped_ns_jpeg_decode")
-    .whitelist_function("wrapped_ns_png_init")
-    .whitelist_function("wrapped_ns_png_cleanup")
-    .whitelist_function("wrapped_ns_png_decode")
+    .whitelist_function("gckimg_color_mgmt_init_default")
+    .whitelist_function("gckimg_color_mgmt_cleanup")
+    .whitelist_function("gckimg_ns_jpeg_init")
+    .whitelist_function("gckimg_ns_jpeg_cleanup")
+    .whitelist_function("gckimg_ns_jpeg_decode")
+    .whitelist_function("gckimg_ns_png_init")
+    .whitelist_function("gckimg_ns_png_cleanup")
+    .whitelist_function("gckimg_ns_png_decode")
     .generate()
     .unwrap()
-    .write_to_file(out_dir.join("wrapped_bind.rs"))
+    .write_to_file(out_dir.join("gckimg_bind.rs"))
     .unwrap();
 }

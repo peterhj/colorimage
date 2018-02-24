@@ -2,10 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifndef __WRAPPED_NS_JPEG_DECODER_H__
-#define __WRAPPED_NS_JPEG_DECODER_H__
+#ifndef __GCKIMG_NS_JPEG_DECODER_H__
+#define __GCKIMG_NS_JPEG_DECODER_H__
 
-#include "common.h"
+#include "image.h"
 
 #include <setjmp.h>
 #include <stdint.h>
@@ -42,11 +42,11 @@ struct NSJpegDecoderCtx {
   uint32_t profile_len;
   int reading;
   void *writer;
-  struct RasterWriterCallbacks callbacks;
+  struct ImageWriterCallbacks callbacks;
 };
 
-void wrapped_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt);
-void wrapped_ns_jpeg_cleanup(struct NSJpegDecoderCtx *ctx);
-void wrapped_ns_jpeg_decode(struct NSJpegDecoderCtx *ctx, const uint8_t *buf, size_t buf_len, void *writer, struct RasterWriterCallbacks callbacks);
+void gckimg_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt);
+void gckimg_ns_jpeg_cleanup(struct NSJpegDecoderCtx *ctx);
+void gckimg_ns_jpeg_decode(struct NSJpegDecoderCtx *ctx, const uint8_t *buf, size_t buf_len, void *writer, struct ImageWriterCallbacks callbacks);
 
 #endif
