@@ -1,0 +1,15 @@
+[package]
+name = "colorimage"
+version = "0.0.1"
+authors = ["Peter Jin <peterhaijin@gmail.com>"]
+
+[lib]
+name = "colorimage"
+path = "src/lib.rs"
+
+[build-dependencies]
+bindgen = "*"
+cc = "*"
+
+[dependencies]
+turbojpeg = { path = "../turbojpeg" }
