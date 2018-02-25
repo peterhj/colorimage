@@ -1,13 +1,18 @@
+extern crate byteorder;
+
 use decoders::*;
 use decoders::jpeg::*;
 use decoders::png::*;
-use ffi::gckimg::{ImageWriterCallbacks};
+use exif::*;
+use ffi::gckimg::*;
 
 use std::collections::{HashSet};
 use std::os::raw::{c_void};
+use std::slice::{from_raw_parts};
 use std::str::{from_utf8};
 
 pub mod decoders;
+pub mod exif;
 pub mod ffi;
 
 pub const BMP_SIGNATURE:    [u8; 2] = [b'B', b'M'];
@@ -76,11 +81,19 @@ pub unsafe extern "C" fn raster_image_write_row(img_p: *mut c_void, row_idx: usi
   assert!(!img_p.is_null());
 }
 
+pub unsafe extern "C" fn raster_image_parse_exif(exif_buf: *const u8, exif_size: usize, exif: *mut ImageExifData) {
+  assert!(!exif_buf.is_null());
+  let raw_exif = unsafe { from_raw_parts(exif_buf, exif_size) };
+  let exif: &mut _ = unsafe { &mut *exif };
+  parse_exif(raw_exif, exif);
+}
+
 impl ImageWriter for RasterImage {
   fn callbacks() -> ImageWriterCallbacks {
     ImageWriterCallbacks{
       init_size:    Some(raster_image_init_size),
       write_row:    Some(raster_image_write_row),
+      parse_exif:   None,
     }
   }
 }

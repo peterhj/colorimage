@@ -5,7 +5,9 @@
 #ifndef __GCKIMG_NS_JPEG_DECODER_H__
 #define __GCKIMG_NS_JPEG_DECODER_H__
 
+#include "color_mgmt.h"
 #include "image.h"
+#include "qcms/qcms.h"
 
 #include <setjmp.h>
 #include <stdint.h>
@@ -30,8 +32,6 @@ struct NSJpegDecoderCtx {
   struct jpeg_source_mgr source;
   struct jpeg_error_mgr err_pub;
   jmp_buf err_setjmp_buf;
-  NSJpegState state;
-  // TODO
   const JOCTET *segment;
   uint32_t segment_len;
   JOCTET *back_buffer;
@@ -40,7 +40,17 @@ struct NSJpegDecoderCtx {
   uint32_t back_buffer_unread_len;
   JOCTET *profile;
   uint32_t profile_len;
+  // TODO
+  uint8_t *imagebuf;
+  uint32_t width;
+  uint32_t height;
+  NSJpegState state;
+  qcms_profile *in_profile;
+  qcms_transform *transform;
   int reading;
+  int errorcode;
+  int color_mgmt;
+  struct ColorMgmtCtx *cm;
   void *writer;
   struct ImageWriterCallbacks callbacks;
 };
