@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "exif.h"
 #include "image.h"
 #include "qcms/qcms.h"
 
@@ -14,8 +15,8 @@
 
 // NOTE: Include jpeg headers after others.
 #include "jpeglib.h"
+#include "iccjpeg.h"
 #include "ns_jpeg_decoder.h"
-#include "extras/iccjpeg.h"
 
 #ifdef MOZ_BIG_ENDIAN
 #define MOZ_JCS_EXT_NATIVE_ENDIAN_XRGB JCS_EXT_XRGB
@@ -281,9 +282,11 @@ void gckimg_ns_jpeg_cleanup(struct NSJpegDecoderCtx *ctx) {
 
 void gckimg_ns_jpeg_decode(
     struct NSJpegDecoderCtx *ctx,
+    struct ColorMgmtCtx *cm,
     const uint8_t *buf, size_t buf_len,
     void *writer, struct ImageWriterCallbacks callbacks)
 {
+  ctx->cm = cm;
   ctx->writer = writer;
   ctx->callbacks = callbacks;
 

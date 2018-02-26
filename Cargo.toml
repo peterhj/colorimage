@@ -13,3 +13,4 @@ cc = "*"
 
 [dependencies]
 byteorder = "*"
+pillowimage = { path = "../pillowimage" }

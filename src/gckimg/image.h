@@ -4,22 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-enum Angle {
-  D0,
-  D90,
-  D180,
-  D270
-};
-
-enum Flip {
-  Unflipped,
-  Horizontal
-};
-
-struct ImageExifData {
-  enum Angle  orientation_rotation;
-  enum Flip   orientation_flip;
-};
+struct ImageExifData;
 
 struct ImageWriterCallbacks {
   void (*init_size)(void *, size_t, size_t, size_t);

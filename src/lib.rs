@@ -1,4 +1,5 @@
 extern crate byteorder;
+extern crate pillowimage;
 
 use decoders::*;
 use decoders::jpeg::*;
@@ -6,47 +7,87 @@ use decoders::png::*;
 use exif::*;
 use ffi::gckimg::*;
 
+use pillowimage::*;
+
 use std::collections::{HashSet};
 use std::os::raw::{c_void};
 use std::slice::{from_raw_parts};
 use std::str::{from_utf8};
 
+pub mod color;
 pub mod decoders;
 pub mod exif;
 pub mod ffi;
 
-pub const BMP_SIGNATURE:    [u8; 2] = [b'B', b'M'];
-pub const GIF87A_SIGNATURE: [u8; 6] = [b'G', b'I', b'F', b'8', b'7', b'a'];
-pub const GIF89A_SIGNATURE: [u8; 6] = [b'G', b'I', b'F', b'8', b'9', b'a'];
-pub const JPEG_SIGNATURE:   [u8; 3] = [0xff, 0xd8, 0xff];
-pub const PNG_SIGNATURE:    [u8; 8] = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-pub const TIFF_SIGNATURE:   [u8; 4] = [b'I', b'I', 42, 0];
+pub const BMP_MAGICNUM:     [u8; 2] = [b'B', b'M'];
+pub const GIF87A_MAGICNUM:  [u8; 6] = [b'G', b'I', b'F', b'8', b'7', b'a'];
+pub const GIF89A_MAGICNUM:  [u8; 6] = [b'G', b'I', b'F', b'8', b'9', b'a'];
+pub const JPEG_MAGICNUM:    [u8; 3] = [0xff, 0xd8, 0xff];
+pub const PNG_MAGICNUM:     [u8; 8] = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+pub const TIFF_MAGICNUM:    [u8; 4] = [b'I', b'I', b'*', 0];
+pub const TIFFB_MAGICNUM:   [u8; 4] = [b'M', b'M', 0, b'*'];
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum ImageFormat {
-  Bmp,
-  Gif,
-  Jpeg,
-  Png,
-  Tiff,
+pub trait ImageWriter {
+  fn callbacks() -> ImageWriterCallbacks;
 }
 
-pub fn guess_image_format_from_signature(buf: &[u8]) -> Option<ImageFormat> {
-  if &buf[ .. 3] == &JPEG_SIGNATURE {
-    return Some(ImageFormat::Jpeg);
-  } else if &buf[ .. 8] == &PNG_SIGNATURE {
-    return Some(ImageFormat::Png);
-  } else if &buf[ .. 6] == &GIF89A_SIGNATURE ||
-            &buf[ .. 6] == &GIF87A_SIGNATURE {
-    return Some(ImageFormat::Gif);
-  } else if &buf[ .. 2] == &BMP_SIGNATURE {
-    return Some(ImageFormat::Bmp);
-  } else if &buf[ .. 4] == &TIFF_SIGNATURE {
-    return Some(ImageFormat::Tiff);
-  } else {
-    println!("DEBUG: colorimage: unknown signature: {:?}", &buf[ .. 10.min(buf.len())]);
+pub unsafe extern "C" fn generic_parse_exif(exif_buf: *const u8, exif_size: usize, exif: *mut ImageExifData) {
+  assert!(!exif_buf.is_null());
+  let raw_exif = from_raw_parts(exif_buf, exif_size);
+  let exif: &mut _ = &mut *exif;
+  parse_exif(raw_exif, exif);
+}
+
+pub struct ColorImage {
+  inner:    Option<PILImage>,
+}
+
+pub unsafe extern "C" fn color_image_init_size(img_p: *mut c_void, width: usize, height: usize, _channels: usize) {
+  assert!(!img_p.is_null());
+  let mut img = &mut *(img_p as *mut ColorImage);
+  img.inner = Some(PILImage::new(PILMode::RGB, width as _, height as _));
+}
+
+pub unsafe extern "C" fn color_image_write_row(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_size: usize) {
+  assert!(!img_p.is_null());
+  let mut img = &mut *(img_p as *mut ColorImage);
+
+  assert!(!row_buf.is_null());
+  let row = from_raw_parts(row_buf, row_size);
+
+  assert!(img.inner.is_some());
+
+  // TODO
+  unimplemented!();
+}
+
+impl ImageWriter for ColorImage {
+  fn callbacks() -> ImageWriterCallbacks {
+    ImageWriterCallbacks{
+      init_size:    Some(color_image_init_size),
+      write_row:    Some(color_image_write_row),
+      parse_exif:   Some(generic_parse_exif),
+    }
   }
-  None
+}
+
+impl ColorImage {
+  pub fn width(&self) -> usize {
+    // TODO
+    unimplemented!();
+  }
+
+  pub fn height(&self) -> usize {
+    // TODO
+    unimplemented!();
+  }
+
+  pub fn resize(&mut self, new_width: usize, new_height: usize) {
+    assert!(self.inner.is_some());
+    // TODO
+    //self.img.resample(new_width as _, new_height as _, _);
+    unimplemented!();
+  }
 }
 
 pub struct RasterImage {
@@ -60,7 +101,7 @@ pub unsafe extern "C" fn raster_image_init_size(img_p: *mut c_void, width: usize
   println!("DEBUG: RasterImage: init size: {} {} {}",
       width, height, channels);
   assert!(!img_p.is_null());
-  let mut img = unsafe { &mut *(img_p as *mut RasterImage) };
+  let mut img = &mut *(img_p as *mut RasterImage);
   img.width = width;
   img.height = height;
   img.channels = channels;
@@ -74,18 +115,20 @@ pub unsafe extern "C" fn raster_image_init_size(img_p: *mut c_void, width: usize
   }
 }
 
-pub unsafe extern "C" fn raster_image_write_row(img_p: *mut c_void, row_idx: usize, row_data: *const u8, row_size: usize) {
-  // TODO
+pub unsafe extern "C" fn raster_image_write_row(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_size: usize) {
   println!("DEBUG: RasterImage: write row: {} {}",
       row_idx, row_size);
   assert!(!img_p.is_null());
-}
+  let mut img = &mut *(img_p as *mut RasterImage);
 
-pub unsafe extern "C" fn raster_image_parse_exif(exif_buf: *const u8, exif_size: usize, exif: *mut ImageExifData) {
-  assert!(!exif_buf.is_null());
-  let raw_exif = unsafe { from_raw_parts(exif_buf, exif_size) };
-  let exif: &mut _ = unsafe { &mut *exif };
-  parse_exif(raw_exif, exif);
+  assert!(!row_buf.is_null());
+  let row = from_raw_parts(row_buf, row_size);
+
+  // TODO: convert pixel format, if necessary.
+  assert_eq!(row_size, img.width * img.channels);
+  for i in 0 .. row_size {
+    img.data[row_idx][i] = row[i];
+  }
 }
 
 impl ImageWriter for RasterImage {
@@ -93,7 +136,7 @@ impl ImageWriter for RasterImage {
     ImageWriterCallbacks{
       init_size:    Some(raster_image_init_size),
       write_row:    Some(raster_image_write_row),
-      parse_exif:   None,
+      parse_exif:   Some(generic_parse_exif),
     }
   }
 }
@@ -109,37 +152,76 @@ impl RasterImage {
   }
 }
 
-pub fn decode_png_image(buf: &[u8], writer: &mut RasterImage) -> Result<(), ()> {
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum ImageFormat {
+  Bmp,
+  Gif,
+  Jpeg,
+  Png,
+  Tiff,
+}
+
+pub fn guess_image_format_from_magicnum(buf: &[u8]) -> Option<ImageFormat> {
+  if &buf[ .. 3] == &JPEG_MAGICNUM {
+    return Some(ImageFormat::Jpeg);
+  } else if &buf[ .. 8] == &PNG_MAGICNUM {
+    return Some(ImageFormat::Png);
+  } else if &buf[ .. 6] == &GIF89A_MAGICNUM ||
+            &buf[ .. 6] == &GIF87A_MAGICNUM {
+    return Some(ImageFormat::Gif);
+  } else if &buf[ .. 2] == &BMP_MAGICNUM {
+    return Some(ImageFormat::Bmp);
+  } else if &buf[ .. 4] == &TIFF_MAGICNUM ||
+            &buf[ .. 4] == &TIFFB_MAGICNUM {
+    return Some(ImageFormat::Tiff);
+  } else {
+    println!("DEBUG: colorimage: unknown magicnum: {:?}", &buf[ .. 10.min(buf.len())]);
+  }
+  None
+}
+
+pub fn decode_jpeg_image<W>(buf: &[u8], writer: &mut W) -> Result<(), ()> where W: ImageWriter + 'static {
+  match NSJpegDecoder::new(true).decode(buf, writer) {
+    Ok(_) => Ok(()),
+    Err(_) => Err(()),
+  }
+}
+
+pub fn decode_png_image<W>(buf: &[u8], writer: &mut W) -> Result<(), ()> where W: ImageWriter + 'static {
   match NSPngDecoder::new(true).decode(buf, writer) {
     Ok(_) => Ok(()),
     Err(_) => Err(()),
   }
 }
 
-pub fn decode_image(buf: &[u8], writer: &mut RasterImage) -> Result<(), (Option<()>, ())> {
-  let maybe_format = guess_image_format_from_signature(buf);
+pub fn decode_image<W>(buf: &[u8], writer: &mut W) -> Result<(), ()> where W: ImageWriter + 'static {
+  let maybe_format = guess_image_format_from_magicnum(buf);
   let mut tried_formats = None;
   if let Some(format) = maybe_format {
-    match format {
-      ImageFormat::Jpeg => {
-        match NSJpegDecoder::new(true).decode(buf, writer) {
-          Ok(img) => return Ok(img),
-          Err(_) => {}
-        }
-      }
-      ImageFormat::Png => {
-        match NSPngDecoder::new(true).decode(buf, writer) {
-          Ok(img) => return Ok(img),
-          Err(_) => {}
-        }
-      }
-      /*ImageFormat::Gif => {
-      }*/
-      _ => {}
+    let res = match format {
+      ImageFormat::Jpeg => decode_jpeg_image(buf, writer),
+      ImageFormat::Png  => decode_png_image(buf, writer),
+      // TODO
+      _ => unimplemented!(),
+    };
+    if res.is_ok() {
+      return Ok(());
     }
     tried_formats = Some(HashSet::new());
     tried_formats.as_mut().unwrap().insert(format);
   }
+  if !tried_formats.as_ref().unwrap().contains(&ImageFormat::Jpeg) {
+    if decode_jpeg_image(buf, writer).is_ok() {
+      return Ok(());
+    }
+    tried_formats.as_mut().unwrap().insert(ImageFormat::Jpeg);
+  }
+  if !tried_formats.as_ref().unwrap().contains(&ImageFormat::Png) {
+    if decode_png_image(buf, writer).is_ok() {
+      return Ok(());
+    }
+    tried_formats.as_mut().unwrap().insert(ImageFormat::Png);
+  }
   // TODO
-  unimplemented!();
+  Err(())
 }

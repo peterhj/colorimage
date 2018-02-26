@@ -57,6 +57,10 @@ struct NSJpegDecoderCtx {
 
 void gckimg_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt);
 void gckimg_ns_jpeg_cleanup(struct NSJpegDecoderCtx *ctx);
-void gckimg_ns_jpeg_decode(struct NSJpegDecoderCtx *ctx, const uint8_t *buf, size_t buf_len, void *writer, struct ImageWriterCallbacks callbacks);
+void gckimg_ns_jpeg_decode(
+    struct NSJpegDecoderCtx *ctx,
+    struct ColorMgmtCtx *cm,
+    const uint8_t *buf, size_t buf_len,
+    void *writer, struct ImageWriterCallbacks callbacks);
 
 #endif
