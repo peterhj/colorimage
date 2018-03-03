@@ -109,7 +109,6 @@ METHODDEF(void) init_source(j_decompress_ptr jd) {
         A zero or negative skip count should be treated as a no-op.
 */
 METHODDEF(void) skip_input_data(j_decompress_ptr jd, long num_bytes) {
-  fprintf(stderr, "DEBUG: gckimg: jpeg callback: skip input data\n");
   struct jpeg_source_mgr *src = jd->src;
   struct NSJpegDecoderCtx *ctx = (struct NSJpegDecoderCtx *)(jd->client_data);
   assert(src != NULL);
@@ -141,7 +140,6 @@ METHODDEF(void) skip_input_data(j_decompress_ptr jd, long num_bytes) {
         suspension is desired.
 */
 METHODDEF(boolean) fill_input_buffer(j_decompress_ptr jd) {
-  fprintf(stderr, "DEBUG: gckimg: jpeg callback: fill input buffer\n");
   struct jpeg_source_mgr *src = jd->src;
   struct NSJpegDecoderCtx *ctx = (struct NSJpegDecoderCtx *)(jd->client_data);
   assert(src != NULL);
@@ -267,7 +265,6 @@ static int _ns_jpeg_read_orientation_from_exif(struct NSJpegDecoderCtx *ctx, str
 }
 
 static int _ns_jpeg_output_scanlines(struct NSJpegDecoderCtx *ctx) {
-  fprintf(stderr, "DEBUG: gckimg: output scanlines\n");
   int suspend = 0;
 
   const uint32_t top = ctx->info.output_scanline;
@@ -275,9 +272,6 @@ static int _ns_jpeg_output_scanlines(struct NSJpegDecoderCtx *ctx) {
   uint8_t *output_buf = (JSAMPROW)malloc(sizeof(uint8_t) * 16 * ctx->info.output_width);
   assert(output_buf != NULL);
 
-  fprintf(stderr, "DEBUG: gckimg:   output width:  %u\n", ctx->info.output_width);
-  fprintf(stderr, "DEBUG: gckimg:   output height: %u\n", ctx->info.output_height);
-  fflush(NULL);
   while (ctx->info.output_scanline < ctx->info.output_height) {
     /*// TODO: should use `imagebuf` or something else?
     uint32_t* imageRow = (uint32_t *)(ctx->imagebuf) + (ctx->info.output_scanline * ctx->info.output_width);
@@ -386,8 +380,6 @@ static int _ns_jpeg_output_scanlines(struct NSJpegDecoderCtx *ctx) {
 }
 
 void gckimg_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt) {
-  fprintf(stderr, "DEBUG: gckimg: ns jpeg init\n");
-  fprintf(stderr, "DEBUG: gckimg:   jpeg lib version: %d\n", JPEG_LIB_VERSION);
   ctx->color_mgmt = color_mgmt;
   ctx->reading = 1;
 
@@ -407,19 +399,17 @@ void gckimg_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt) {
     return;
   }*/
 
-  fprintf(stderr, "DEBUG: gckimg: create decompress\n");
   // Step 1: allocate and initialize JPEG decompression object.
   jpeg_create_decompress(&ctx->info);
   // Set the source manager.
   ctx->info.src = &ctx->source;
-  fprintf(stderr, "DEBUG: gckimg: success: create decompress\n");
 
-  fprintf(stderr, "DEBUG: gckimg: setup init error handling\n");
+  ctx->info.client_data = ctx;
+
   // We set up the normal JPEG error routines, then override error_exit.
   jpeg_std_error(&ctx->err_pub);
   ctx->info.err = &ctx->err_pub;
-  ctx->err_pub.error_exit = my_error_exit;
-  fprintf(stderr, "DEBUG: gckimg:   reset error mgr: %0lx\n", (size_t)(ctx->info.err->reset_error_mgr));
+  //ctx->err_pub.error_exit = my_error_exit;
 
   // Step 2: specify data source (eg, a file).
 
@@ -436,12 +426,9 @@ void gckimg_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt) {
   for (uint32_t m = 0; m < 16; m++) {
     jpeg_save_markers(&ctx->info, JPEG_APP0 + m, 0xffff);
   }
-  fprintf(stderr, "DEBUG: gckimg: finished ns jpeg init\n");
-  fprintf(stderr, "DEBUG: gckimg:   reset error mgr: %0lx\n", (size_t)(ctx->info.err->reset_error_mgr));
 }
 
 void gckimg_ns_jpeg_cleanup(struct NSJpegDecoderCtx *ctx) {
-  fprintf(stderr, "DEBUG: gckimg: ns jpeg cleanup\n");
   // Step 8: release JPEG decompression object.
   ctx->info.src = NULL;
   jpeg_destroy_decompress(&ctx->info);
@@ -465,12 +452,6 @@ void gckimg_ns_jpeg_decode(
     const uint8_t *buf, size_t buf_len,
     void *writer, struct ImageWriterCallbacks callbacks)
 {
-  fprintf(stderr, "DEBUG: gckimg: ns jpeg decode\n");
-  fprintf(stderr, "DEBUG: gckimg:   buf ptr: %0lx\n", (size_t)buf);
-  fprintf(stderr, "DEBUG: gckimg:   buf len: %lu\n", buf_len);
-
-  fprintf(stderr, "DEBUG: gckimg:   reset error mgr: %0lx\n", (size_t)(ctx->info.err->reset_error_mgr));
-
   ctx->cm = cm;
   ctx->writer = writer;
   ctx->callbacks = callbacks;
@@ -487,26 +468,17 @@ void gckimg_ns_jpeg_decode(
     return;
   }*/
 
-  ctx->info.src = &ctx->source;
-  ctx->info.client_data = ctx;
-
   ctx->state = NS_JPEG_HEADER;
   switch (ctx->state) {
     case NS_JPEG_HEADER: {
-      fprintf(stderr, "DEBUG: gckimg: jpeg decode: read header\n");
-      fflush(NULL);
-      fprintf(stderr, "DEBUG: gckimg:   reset error mgr: %0lx\n", (size_t)(ctx->info.err->reset_error_mgr));
       // Step 3: read file parameters with jpeg_read_header().
       if (jpeg_read_header(&ctx->info, TRUE) == JPEG_SUSPENDED) {
         fprintf(stderr, "WARNING: gckimg: jpeg decode: read header suspended\n");
         // TODO: error.
+        ctx->errorcode = -1;
         return;
       }
-      fprintf(stderr, "DEBUG: gckimg: jpeg decode: success: read header\n");
-      fflush(NULL);
 
-      fprintf(stderr, "DEBUG: gckimg: jpeg decode: init size\n");
-      fflush(NULL);
       // Post our size to the superclass.
       // TODO: depends on orientation from exif.
       struct ImageExifData exif;
@@ -518,11 +490,7 @@ void gckimg_ns_jpeg_decode(
       ctx->width = ctx->info.image_width;
       ctx->height = ctx->info.image_height;
       ctx->callbacks.init_size(ctx->writer, ctx->width, ctx->height, 3);
-      fprintf(stderr, "DEBUG: gckimg: jpeg decode: success: init size\n");
-      fflush(NULL);
 
-      fprintf(stderr, "DEBUG: gckimg: jpeg decode: color profile\n");
-      fflush(NULL);
       // We're doing a full decode.
       ctx->in_profile = _jpeg_get_icc_profile(&ctx->info);
       if (ctx->in_profile != NULL && ctx->color_mgmt) {
@@ -556,6 +524,7 @@ void gckimg_ns_jpeg_decode(
             mismatch = 1;
           default:
             // TODO: error.
+            ctx->errorcode = -1;
             return;
         }
 
@@ -570,6 +539,7 @@ void gckimg_ns_jpeg_decode(
               break;
             default:
               // TODO: error.
+              ctx->errorcode = -1;
               return;
           }
 
@@ -598,6 +568,7 @@ void gckimg_ns_jpeg_decode(
           }
         } else {
           // TODO: ICM profile colorspace mismatch.
+          fprintf(stderr, "WARNING: gckimg: jpeg colorspace mismatch\n");
         }
       }
 
@@ -620,10 +591,10 @@ void gckimg_ns_jpeg_decode(
             break;
           default:
             // TODO: error.
+            ctx->errorcode = -1;
             return;
         }
       }
-      fprintf(stderr, "DEBUG: gckimg: jpeg decode: success: color profile\n");
 
       // Don't allocate a giant and superfluous memory buffer
       // when not doing a progressive decode.
@@ -640,7 +611,6 @@ void gckimg_ns_jpeg_decode(
     }
 
     case NS_JPEG_START_DECOMPRESS: {
-      fprintf(stderr, "DEBUG: gckimg: jpeg decode: start decompress\n");
       // Step 4: set parameters for decompression.
 
       // FIXME -- Should reset dct_method and dither mode
@@ -655,6 +625,7 @@ void gckimg_ns_jpeg_decode(
       // Step 5: start decompressor.
       if (jpeg_start_decompress(&ctx->info) == FALSE) {
         // TODO: error.
+        ctx->errorcode = -1;
         return;
       }
 
@@ -664,12 +635,12 @@ void gckimg_ns_jpeg_decode(
     }
 
     case NS_JPEG_DECOMPRESS_SEQUENTIAL: {
-      fprintf(stderr, "DEBUG: gckimg: jpeg decode: sequential\n");
       if (ctx->state == NS_JPEG_DECOMPRESS_SEQUENTIAL) {
         int suspend = _ns_jpeg_output_scanlines(ctx);
 
         if (suspend) {
           // TODO: I/O suspension.
+          ctx->errorcode = -1;
           return; // I/O suspension
         }
 
@@ -681,7 +652,6 @@ void gckimg_ns_jpeg_decode(
     }
 
     case NS_JPEG_DECOMPRESS_PROGRESSIVE: {
-      fprintf(stderr, "DEBUG: gckimg: jpeg decode: progressive\n");
       if (ctx->state == NS_JPEG_DECOMPRESS_PROGRESSIVE) {
         int status;
         do {
@@ -704,6 +674,7 @@ void gckimg_ns_jpeg_decode(
 
             if (!jpeg_start_output(&ctx->info, scan)) {
               // TODO: I/O suspension.
+              ctx->errorcode = -1;
               return; // I/O suspension
             }
           }
@@ -721,12 +692,14 @@ void gckimg_ns_jpeg_decode(
               ctx->info.output_scanline = 0xffffff;
             }
             // TODO: I/O suspension.
+            ctx->errorcode = -1;
             return; // I/O suspension
           }
 
           if (ctx->info.output_scanline == ctx->info.output_height) {
             if (!jpeg_finish_output(&ctx->info)) {
               // TODO: I/O suspension.
+              ctx->errorcode = -1;
               return; // I/O suspension
             }
 
@@ -745,10 +718,10 @@ void gckimg_ns_jpeg_decode(
     }
 
     case NS_JPEG_DONE: {
-      fprintf(stderr, "DEBUG: gckimg: jpeg decode: done\n");
       // Step 7: finish decompression.
       if (jpeg_finish_decompress(&ctx->info) == FALSE) {
         // TODO: I/O suspension; this shouldn't happen.
+        ctx->errorcode = -1;
         return;
       }
       // Make sure we don't feed any more data to libjpeg-turbo.

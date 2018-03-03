@@ -2,7 +2,7 @@ use ::*;
 use color::*;
 use ffi::gckimg::*;
 
-use std::mem::{transmute, zeroed};
+use std::mem::{zeroed};
 
 pub struct NSPngDecoder {
   ctx:  NSPngDecoderCtx,
@@ -17,6 +17,7 @@ impl NSPngDecoder {
   pub fn decode<W>(&mut self, buf: &[u8], writer: &mut W) -> Result<(), ()>
   where W: ImageWriter + 'static {
     // TODO: zero out the context memory.
+    self.ctx = unsafe { zeroed() };
     COLOR_MGMT.with(|cm| {
       let mut cm = cm.borrow_mut();
       unsafe { gckimg_ns_png_init(
@@ -34,6 +35,6 @@ impl NSPngDecoder {
           &mut self.ctx as *mut _) };
     });
     // TODO
-    Err(())
+    Ok(())
   }
 }

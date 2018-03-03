@@ -16,6 +16,7 @@ impl NSJpegDecoder {
 
   pub fn decode<W>(&mut self, buf: &[u8], writer: &mut W) -> Result<(), ()>
   where W: ImageWriter {
+    self.ctx = unsafe { zeroed() };
     COLOR_MGMT.with(|cm| {
       let mut cm = cm.borrow_mut();
       unsafe { gckimg_ns_jpeg_init(
@@ -32,7 +33,9 @@ impl NSJpegDecoder {
       unsafe { gckimg_ns_jpeg_cleanup(
           &mut self.ctx as *mut _) };
     });
-    // TODO
-    Err(())
+    match self.ctx.errorcode {
+      0 => Ok(()),
+      _ => Err(()),
+    }
   }
 }

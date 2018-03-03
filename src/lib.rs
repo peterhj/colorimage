@@ -98,8 +98,7 @@ pub struct RasterImage {
 }
 
 pub unsafe extern "C" fn raster_image_init_size(img_p: *mut c_void, width: usize, height: usize, channels: usize) {
-  println!("DEBUG: RasterImage: init size: {} {} {}",
-      width, height, channels);
+  //println!("DEBUG: RasterImage: init size: {} {} {}", width, height, channels);
   assert!(!img_p.is_null());
   let mut img = &mut *(img_p as *mut RasterImage);
   img.width = width;
@@ -116,8 +115,7 @@ pub unsafe extern "C" fn raster_image_init_size(img_p: *mut c_void, width: usize
 }
 
 pub unsafe extern "C" fn raster_image_write_row(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_size: usize) {
-  println!("DEBUG: RasterImage: write row: {} {}",
-      row_idx, row_size);
+  //println!("DEBUG: RasterImage: write row: {} {}", row_idx, row_size);
   assert!(!img_p.is_null());
   let mut img = &mut *(img_p as *mut RasterImage);
 
@@ -149,6 +147,14 @@ impl RasterImage {
       channels: 0,
       data:     vec![],
     }
+  }
+
+  pub fn width(&self) -> usize {
+    self.width
+  }
+
+  pub fn height(&self) -> usize {
+    self.height
   }
 }
 
