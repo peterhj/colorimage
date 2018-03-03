@@ -8,16 +8,9 @@ pub struct NSJpegDecoder {
   ctx:  NSJpegDecoderCtx,
 }
 
-impl Drop for NSJpegDecoder {
-  fn drop(&mut self) {
-    unsafe { gckimg_ns_jpeg_cleanup(&mut self.ctx as *mut _) };
-  }
-}
-
 impl NSJpegDecoder {
   pub fn new(color_mgmt: bool) -> NSJpegDecoder {
     let mut ctx: NSJpegDecoderCtx = unsafe { zeroed() };
-    unsafe { gckimg_ns_jpeg_init(&mut ctx as *mut _, if color_mgmt { 1 } else { 0 }) };
     NSJpegDecoder{ctx: ctx}
   }
 
@@ -25,6 +18,10 @@ impl NSJpegDecoder {
   where W: ImageWriter {
     COLOR_MGMT.with(|cm| {
       let mut cm = cm.borrow_mut();
+      unsafe { gckimg_ns_jpeg_init(
+          &mut self.ctx as *mut _,
+          // TODO: color mgmt option.
+          1) };
       unsafe { gckimg_ns_jpeg_decode(
           &mut self.ctx as *mut _,
           &mut cm.ctx as *mut _,
@@ -32,6 +29,8 @@ impl NSJpegDecoder {
           (writer as *mut W) as *mut _,
           <W as ImageWriter>::callbacks(),
       ) };
+      unsafe { gckimg_ns_jpeg_cleanup(
+          &mut self.ctx as *mut _) };
     });
     // TODO
     Err(())

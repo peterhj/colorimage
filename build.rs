@@ -2,6 +2,7 @@ extern crate bindgen;
 extern crate cc;
 
 use std::env;
+use std::fs;
 use std::path::{PathBuf};
 use std::process::{Command};
 
@@ -12,6 +13,7 @@ fn main() {
   println!("cargo:rustc-link-search=native={}", out_dir.display());
   println!("cargo:rustc-link-lib=static=gckimg_native");
   println!("cargo:rustc-link-lib=static=gckimg_native_jpeg");
+  println!("cargo:rustc-link-lib=static=gckimg_native_jpeg_simd");
   println!("cargo:rustc-link-lib=static=gckimg_native_png");
   println!("cargo:rustc-link-lib=z");
 
@@ -22,11 +24,7 @@ fn main() {
   println!("cargo:rerun-if-changed=src/gckimg/ns_png_decoder.c");
   println!("cargo:rerun-if-changed=src/gckimg/ns_png_decoder.h");*/
 
-  Command::new("rm")
-    .current_dir(&out_dir)
-    .arg("-f")
-    .arg(out_dir.join("libgckimg_native.a").as_os_str().to_str().unwrap())
-    .status().unwrap();
+  fs::remove_file(out_dir.join("libgckimg_native.a")).ok();
 
   cc::Build::new()
     .opt_level(2)
@@ -35,9 +33,9 @@ fn main() {
     .flag("-fno-strict-aliasing")
     .flag("-Wall")
     .flag("-Werror")
-    .include("src/gckimg")
-    //.include("src/gckimg/libjpeg")
+    .include("src/gckimg/libjpeg")
     .include("src/gckimg/libpng")
+    .include("src/gckimg")
     .file("src/gckimg/color_mgmt.c")
     .file("src/gckimg/ns_jpeg_decoder.c")
     .file("src/gckimg/ns_png_decoder.c")
@@ -47,17 +45,13 @@ fn main() {
     .file("src/gckimg/qcms/matrix.c")
     .file("src/gckimg/qcms/transform.c")
     // TODO: target feature test?
+    // TODO: platform-dependent vectorized sources.
     .file("src/gckimg/qcms/transform-sse1.c")
     .file("src/gckimg/qcms/transform-sse2.c")
     .file("src/gckimg/qcms/transform_util.c")
-    // TODO: platform-dependent vectorized sources.
     .compile("libgckimg_native.a");
 
-  Command::new("rm")
-    .current_dir(&out_dir)
-    .arg("-f")
-    .arg(out_dir.join("libgckimg_native_jpeg.a").as_os_str().to_str().unwrap())
-    .status().unwrap();
+  fs::remove_file(out_dir.join("libgckimg_native_jpeg.a")).ok();
 
   cc::Build::new()
     .opt_level(2)
@@ -101,15 +95,42 @@ fn main() {
     .file("src/gckimg/libjpeg/jquant1.c")
     .file("src/gckimg/libjpeg/jquant2.c")
     .file("src/gckimg/libjpeg/jutils.c")
+    // TODO: target feature test?
     // TODO: platform-dependent vectorized sources.
-    .file("src/gckimg/libjpeg/jsimd_none.c")
+    .file("src/gckimg/libjpeg/simd/jsimd_x86_64.c")
     .compile("libgckimg_native_jpeg.a");
 
-  Command::new("rm")
-    .current_dir(&out_dir)
-    .arg("-f")
-    .arg(out_dir.join("libgckimg_native_png.a").as_os_str().to_str().unwrap())
-    .status().unwrap();
+  fs::remove_file(out_dir.join("libgckimg_native_jpeg_simd.a")).ok();
+
+  cc::Build::new()
+    .compiler("/opt/yasm/bin/yasm")
+    .explicit_flags_only(true)
+    .flag("-felf64")
+    //.flag("-rnasm")
+    //.flag("-pnasm")
+    .flag("-DELF")
+    .flag("-D__x86_64__")
+    .flag("-DPIC")
+    .flag("-Isrc/gckimg/libjpeg/simd/")
+    .file("src/gckimg/libjpeg/simd/jccolor-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jcgray-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jchuff-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jcsample-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jdcolor-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jdmerge-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jdsample-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jfdctflt-sse-64.asm")
+    .file("src/gckimg/libjpeg/simd/jfdctfst-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jfdctint-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jidctflt-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jidctfst-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jidctint-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jidctred-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jquantf-sse2-64.asm")
+    .file("src/gckimg/libjpeg/simd/jquanti-sse2-64.asm")
+    .compile("libgckimg_native_jpeg_simd.a");
+
+  fs::remove_file(out_dir.join("libgckimg_native_png.a")).ok();
 
   cc::Build::new()
     .opt_level(2)
@@ -138,11 +159,7 @@ fn main() {
     .file("src/gckimg/libpng/intel/intel_init.c")
     .compile("libgckimg_native_png.a");
 
-  Command::new("rm")
-    .current_dir(&out_dir)
-    .arg("-f")
-    .arg(out_dir.join("gckimg_bind.rs").as_os_str().to_str().unwrap())
-    .status().unwrap();
+  fs::remove_file(out_dir.join("gckimg_bind.rs")).ok();
 
   bindgen::Builder::default()
     .header("wrapped.h")

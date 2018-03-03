@@ -24,8 +24,8 @@ pub const GIF87A_MAGICNUM:  [u8; 6] = [b'G', b'I', b'F', b'8', b'7', b'a'];
 pub const GIF89A_MAGICNUM:  [u8; 6] = [b'G', b'I', b'F', b'8', b'9', b'a'];
 pub const JPEG_MAGICNUM:    [u8; 3] = [0xff, 0xd8, 0xff];
 pub const PNG_MAGICNUM:     [u8; 8] = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-pub const TIFF_MAGICNUM:    [u8; 4] = [b'I', b'I', b'*', 0];
-pub const TIFFB_MAGICNUM:   [u8; 4] = [b'M', b'M', 0, b'*'];
+pub const TIFF_MAGICNUM:    [u8; 4] = [b'I', b'I', b'*',    0];
+pub const TIFFB_MAGICNUM:   [u8; 4] = [b'M', b'M',    0, b'*'];
 
 pub trait ImageWriter {
   fn callbacks() -> ImageWriterCallbacks;

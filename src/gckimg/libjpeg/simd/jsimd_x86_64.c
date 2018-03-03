@@ -30,8 +30,8 @@
 
 #define IS_ALIGNED_SSE(ptr) (IS_ALIGNED(ptr, 4)) /* 16 byte alignment */
 
-static unsigned int simd_support = ~0;
-static unsigned int simd_huffman = 1;
+static const unsigned int simd_support = JSIMD_SSE2 | JSIMD_SSE;
+static const unsigned int simd_huffman = 1;
 
 /*
  * Check what SIMD accelerations are supported.
@@ -41,20 +41,13 @@ static unsigned int simd_huffman = 1;
 LOCAL(void)
 init_simd (void)
 {
-  char *env = NULL;
-
-  if (simd_support != ~0U)
-    return;
-
-  simd_support = JSIMD_SSE2 | JSIMD_SSE;
-
   /* Force different settings through environment variables */
-  env = getenv("JSIMD_FORCENONE");
+  /*env = getenv("JSIMD_FORCENONE");
   if ((env != NULL) && (strcmp(env, "1") == 0))
     simd_support = 0;
   env = getenv("JSIMD_NOHUFFENC");
   if ((env != NULL) && (strcmp(env, "1") == 0))
-    simd_huffman = 0;
+    simd_huffman = 0;*/
 }
 
 GLOBAL(int)

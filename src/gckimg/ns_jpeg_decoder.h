@@ -28,26 +28,27 @@ typedef enum {
 } NSJpegState;
 
 struct NSJpegDecoderCtx {
-  struct jpeg_decompress_struct info;
-  struct jpeg_source_mgr source;
   struct jpeg_error_mgr err_pub;
   jmp_buf err_setjmp_buf;
+  struct jpeg_decompress_struct info;
+  struct jpeg_source_mgr source;
   const JOCTET *segment;
   uint32_t segment_len;
   JOCTET *back_buffer;
   uint32_t back_buffer_len;
   uint32_t back_buffer_size;
   uint32_t back_buffer_unread_len;
+  size_t bytes_to_skip;
+  int reading;
   JOCTET *profile;
   uint32_t profile_len;
   // TODO
-  uint8_t *imagebuf;
+  //uint8_t *imagebuf;
   uint32_t width;
   uint32_t height;
   NSJpegState state;
   qcms_profile *in_profile;
   qcms_transform *transform;
-  int reading;
   int errorcode;
   int color_mgmt;
   struct ColorMgmtCtx *cm;
