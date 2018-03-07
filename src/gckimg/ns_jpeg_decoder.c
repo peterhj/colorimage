@@ -237,7 +237,7 @@ METHODDEF(void) term_source(j_decompress_ptr jd) {
   (void)jd;
 }
 
-static int _ns_jpeg_read_orientation_from_exif(struct NSJpegDecoderCtx *ctx, struct ImageExifData *exif) {
+static int _ns_jpeg_read_orientation_from_exif(struct NSJpegDecoderCtx *ctx) {
   jpeg_saved_marker_ptr marker;
 
   // Locate the APP1 marker, where EXIF data is stored, in the marker list.
@@ -249,8 +249,8 @@ static int _ns_jpeg_read_orientation_from_exif(struct NSJpegDecoderCtx *ctx, str
 
   // If we're at the end of the list, there's no EXIF data.
   if (marker == NULL) {
-    exif->orientation_rotation = D0;
-    exif->orientation_flip = Unflipped;
+    //exif->orientation_rotation = D0;
+    //exif->orientation_flip = Unflipped;
     return 0;
   }
 
@@ -260,8 +260,7 @@ static int _ns_jpeg_read_orientation_from_exif(struct NSJpegDecoderCtx *ctx, str
     return 0;
   }
   // TODO: error handling.
-  (ctx->callbacks.parse_exif)(marker->data, marker->data_length, exif);
-  return 1;
+  return (ctx->callbacks.parse_exif)(marker->data, marker->data_length);
 }
 
 static int _ns_jpeg_output_scanlines(struct NSJpegDecoderCtx *ctx) {
@@ -481,11 +480,10 @@ void gckimg_ns_jpeg_decode(
 
       // Post our size to the superclass.
       // TODO: depends on orientation from exif.
-      struct ImageExifData exif;
-      _ns_jpeg_read_orientation_from_exif(ctx, &exif);
-      if (exif.orientation_rotation != D0 || exif.orientation_flip != Unflipped) {
+      int exif_orient_code = _ns_jpeg_read_orientation_from_exif(ctx);
+      if (exif_orient_code >= 1 && exif_orient_code <= 8) {
         // TODO: not currently handling exif orientation; warn here.
-        fprintf(stderr, "WARNING: gckimg: ignoring exif orientation\n");
+        fprintf(stderr, "WARNING: gckimg: ignoring exif orientation: %d\n", exif_orient_code);
       }
       ctx->width = ctx->info.image_width;
       ctx->height = ctx->info.image_height;

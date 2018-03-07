@@ -8,7 +8,7 @@ use byteorder::*;
 
 use std::io::{Read, Seek, Cursor, SeekFrom};
 
-pub fn parse_exif(raw_exif: &[u8], exif: &mut ImageExifData) -> Result<(), ()> {
+pub fn parse_exif(raw_exif: &[u8]) -> Result<i32, ()> {
   // An APP1 segment larger than 64k violates the JPEG standard.
   if raw_exif.len() > 64 * 1024 {
     return Err(());
@@ -35,15 +35,15 @@ pub fn parse_exif(raw_exif: &[u8], exif: &mut ImageExifData) -> Result<(), ()> {
 
   // Determine byte order.
   if match_bytes(&mut cursor, b"MM\0*", &mut buf).is_ok() {
-    _parse_exif_part2::<BigEndian>(&mut cursor, buf, exif)
+    _parse_exif_part2::<BigEndian>(&mut cursor, buf)
   } else if match_bytes(&mut cursor, b"II*\0", &mut buf).is_ok() {
-    _parse_exif_part2::<LittleEndian>(&mut cursor, buf, exif)
+    _parse_exif_part2::<LittleEndian>(&mut cursor, buf)
   } else {
     Err(())
   }
 }
 
-fn _parse_exif_part2<E>(cursor: &mut Cursor<&[u8]>, mut buf: Vec<u8>, exif: &mut ImageExifData) -> Result<(), ()> where E: ByteOrder {
+fn _parse_exif_part2<E>(cursor: &mut Cursor<&[u8]>, mut buf: Vec<u8>) -> Result<i32, ()> where E: ByteOrder {
   // Determine offset of the 0th IFD. (It shouldn't be greater than 64k, which
   // is the maximum size of the entry APP1 segment.)
   let ifd0_offset = match cursor.read_u32::<E>() {
@@ -105,19 +105,11 @@ fn _parse_exif_part2<E>(cursor: &mut Cursor<&[u8]>, mut buf: Vec<u8>, exif: &mut
       Err(_) => return Err(()),
     };
 
-    let (rotation, flip) = match value {
-      1 => (Angle_D0,   Flip_Unflipped),
-      2 => (Angle_D0,   Flip_Horizontal),
-      3 => (Angle_D180, Flip_Unflipped),
-      4 => (Angle_D180, Flip_Horizontal),
-      5 => (Angle_D90,  Flip_Unflipped),
-      6 => (Angle_D90,  Flip_Horizontal),
-      7 => (Angle_D270, Flip_Unflipped),
-      8 => (Angle_D270, Flip_Horizontal),
-      _ => return Err(()),
+    let exif_orient_code = if value >= 1 && value <= 8 {
+      value as i32
+    } else {
+      return Err(());
     };
-    exif.orientation_rotation = rotation;
-    exif.orientation_flip = flip;
 
     // This is a 32-bit field, but the orientation value only occupies the first
     // 16 bits. We need to advance another 16 bits to consume the entire field.
@@ -125,7 +117,7 @@ fn _parse_exif_part2<E>(cursor: &mut Cursor<&[u8]>, mut buf: Vec<u8>, exif: &mut
       Ok(_) => {}
       Err(_) => return Err(()),
     };
-    return Ok(());
+    return Ok(exif_orient_code);
   }
 
   Err(())

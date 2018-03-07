@@ -194,10 +194,12 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
       &width, &height, &bit_depth, &color_type,
       &interlace_type, &compression_type, &filter_type);
 
-  // Post our size to the superclass.
   ctx->width = width;
   ctx->height = height;
   ctx->depth = bit_depth;
+
+  // Post our size to the superclass.
+  ctx->callbacks.init_size(ctx->writer, width, height, 3);
 
   // TODO: check size limits.
 
@@ -288,10 +290,7 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
   // members and whatnot, after which we can get channels, rowbytes, etc.
   png_read_update_info(ctx->png, ctx->info);
   channels = png_get_channels(ctx->png, ctx->info);
-
-  // Post our size to the superclass.
   ctx->channels = channels;
-  ctx->callbacks.init_size(ctx->writer, width, height, channels);
 
   //---------------------------------------------------------------//
   // copy PNG info into imagelib structs (formerly png_set_dims()) //

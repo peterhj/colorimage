@@ -31,11 +31,10 @@ pub trait ImageWriter {
   fn callbacks() -> ImageWriterCallbacks;
 }
 
-pub unsafe extern "C" fn generic_parse_exif(exif_buf: *const u8, exif_size: usize, exif: *mut ImageExifData) {
+pub unsafe extern "C" fn generic_parse_exif(exif_buf: *const u8, exif_size: usize) -> i32 {
   assert!(!exif_buf.is_null());
   let raw_exif = from_raw_parts(exif_buf, exif_size);
-  let exif: &mut _ = &mut *exif;
-  parse_exif(raw_exif, exif);
+  parse_exif(raw_exif).unwrap_or(0)
 }
 
 pub struct ColorImage {
@@ -45,7 +44,7 @@ pub struct ColorImage {
 pub unsafe extern "C" fn color_image_init_size(img_p: *mut c_void, width: usize, height: usize, _channels: usize) {
   assert!(!img_p.is_null());
   let mut img = &mut *(img_p as *mut ColorImage);
-  img.inner = Some(PILImage::new(PILMode::RGB, width as _, height as _));
+  img.inner = Some(PILImage::new(PILMode::RGBX, width as _, height as _));
 }
 
 pub unsafe extern "C" fn color_image_write_row(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_size: usize) {
