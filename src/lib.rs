@@ -43,49 +43,77 @@ pub struct ColorImage {
 
 pub unsafe extern "C" fn color_image_init_size(img_p: *mut c_void, width: usize, height: usize) {
   assert!(!img_p.is_null());
-  let mut img = &mut *(img_p as *mut ColorImage);
-  img.inner = Some(PILImage::new(PILMode::RGBX, width as _, height as _));
+  let img = &mut *(img_p as *mut ColorImage);
+  img.inner = Some(PILImage::new(PILMode::RGB, width as _, height as _));
 }
 
-pub unsafe extern "C" fn color_image_write_row(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
+pub unsafe extern "C" fn color_image_write_row_gray(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
+  // TODO
+  unimplemented!();
+}
+
+pub unsafe extern "C" fn color_image_write_row_grayx(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
+  // TODO
+  unimplemented!();
+}
+
+pub unsafe extern "C" fn color_image_write_row_rgb(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
   assert!(!img_p.is_null());
-  let mut img = &mut *(img_p as *mut ColorImage);
+  let img = &mut *(img_p as *mut ColorImage);
 
   assert!(!row_buf.is_null());
-  // FIXME
   let row_size = 3 * row_width;
   let row = from_raw_parts(row_buf, row_size);
 
   assert!(img.inner.is_some());
+  assert_eq!(row_width, img.inner.as_ref().unwrap().width() as _);
+  let mut dst_line = img.inner.as_mut().unwrap().raster_line_mut(row_idx as _);
+  for i in 0 .. row_width {
+    dst_line[4 * i]     = row[3 * i];
+    dst_line[4 * i + 1] = row[3 * i + 1];
+    dst_line[4 * i + 2] = row[3 * i + 2];
+    /*dst_line[4 * i + 3] = 0xff;*/
+  }
+}
 
-  // TODO
-  unimplemented!();
+pub unsafe extern "C" fn color_image_write_row_rgbx(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
+  assert!(!img_p.is_null());
+  let img = &mut *(img_p as *mut ColorImage);
+
+  assert!(!row_buf.is_null());
+  let row_size = 4 * row_width;
+  let row = from_raw_parts(row_buf, row_size);
+
+  assert!(img.inner.is_some());
+  img.inner.as_mut().unwrap().raster_line_mut(row_idx as _).copy_from_slice(row);
 }
 
 impl ImageWriter for ColorImage {
   fn callbacks() -> ImageWriterCallbacks {
     ImageWriterCallbacks{
       init_size:        Some(color_image_init_size),
-      //write_row:        Some(color_image_write_row),
-      // FIXME
-      write_row_gray:   Some(color_image_write_row),
-      write_row_grayx:  Some(color_image_write_row),
-      write_row_rgb:    Some(color_image_write_row),
-      write_row_rgbx:   Some(color_image_write_row),
+      write_row_gray:   Some(color_image_write_row_gray),
+      write_row_grayx:  Some(color_image_write_row_grayx),
+      write_row_rgb:    Some(color_image_write_row_rgb),
+      write_row_rgbx:   Some(color_image_write_row_rgbx),
       parse_exif:       Some(generic_parse_exif),
     }
   }
 }
 
 impl ColorImage {
+  pub fn new() -> Self {
+    ColorImage{inner: None}
+  }
+
   pub fn width(&self) -> usize {
-    // TODO
-    unimplemented!();
+    assert!(self.inner.is_some());
+    self.inner.as_ref().unwrap().width() as _
   }
 
   pub fn height(&self) -> usize {
-    // TODO
-    unimplemented!();
+    assert!(self.inner.is_some());
+    self.inner.as_ref().unwrap().height() as _
   }
 
   pub fn resize(&mut self, new_width: usize, new_height: usize) {
@@ -106,7 +134,7 @@ pub struct RasterImage {
 pub unsafe extern "C" fn raster_image_init_size(img_p: *mut c_void, width: usize, height: usize) {
   //println!("DEBUG: RasterImage: init size: {} {} {}", width, height, channels);
   assert!(!img_p.is_null());
-  let mut img = &mut *(img_p as *mut RasterImage);
+  let img = &mut *(img_p as *mut RasterImage);
   let channels = 3;
   img.width = width;
   img.height = height;
@@ -132,7 +160,7 @@ pub unsafe extern "C" fn raster_image_write_row_grayx(img_p: *mut c_void, row_id
 pub unsafe extern "C" fn raster_image_write_row_rgb(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
   //println!("DEBUG: RasterImage: write row: {} {}", row_idx, row_size);
   assert!(!img_p.is_null());
-  let mut img = &mut *(img_p as *mut RasterImage);
+  let img = &mut *(img_p as *mut RasterImage);
 
   assert!(!row_buf.is_null());
   let row_size = 3 * row_width;
@@ -147,7 +175,7 @@ pub unsafe extern "C" fn raster_image_write_row_rgb(img_p: *mut c_void, row_idx:
 pub unsafe extern "C" fn raster_image_write_row_rgbx(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
   //println!("DEBUG: RasterImage: write row: {} {}", row_idx, row_size);
   assert!(!img_p.is_null());
-  let mut img = &mut *(img_p as *mut RasterImage);
+  let img = &mut *(img_p as *mut RasterImage);
 
   assert!(!row_buf.is_null());
   let row_size = 4 * row_width;
@@ -165,7 +193,6 @@ impl ImageWriter for RasterImage {
   fn callbacks() -> ImageWriterCallbacks {
     ImageWriterCallbacks{
       init_size:        Some(raster_image_init_size),
-      //write_row:        Some(raster_image_write_row),
       write_row_gray:   Some(raster_image_write_row_gray),
       write_row_grayx:  Some(raster_image_write_row_grayx),
       write_row_rgb:    Some(raster_image_write_row_rgb),
