@@ -453,7 +453,6 @@ static void PNGAPI end_callback(png_structp _png, png_infop _info) {
 }
 
 size_t gckimg_ns_png_sizeof(void) {
-  //fprintf(stderr, "DEBUG: gckimg: gckimg_ns_png_init: sizeof: %lu\n", sizeof(struct NSPngDecoderCtx));
   return sizeof(struct NSPngDecoderCtx);
 }
 

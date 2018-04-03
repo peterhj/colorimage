@@ -270,17 +270,7 @@ static int _ns_jpeg_output_scanlines(struct NSJpegDecoderCtx *ctx) {
 
   //const uint32_t top = ctx->info.output_scanline;
 
-  // FIXME: keep this buffer somewhere, where `mImageData` was originally
-  // allocated.
-  //uint8_t *output_buf = (JSAMPROW)malloc(sizeof(uint8_t) * 16 * ctx->info.output_width);
-  //assert(output_buf != NULL);
-
   while (ctx->info.output_scanline < ctx->info.output_height) {
-    // TODO: should use `imagebuf` or something else?
-    //uint32_t* image_row = (uint32_t *)(ctx->image_buf) + (ctx->info.output_scanline * ctx->info.output_width);
-    //uint8_t *image_row = ctx->image_buf + (4U * ctx->info.output_scanline * ctx->info.output_width);
-    //assert(image_row != NULL && "Should have a row buffer here");
-
     if (ctx->info.out_color_space == MOZ_JCS_EXT_NATIVE_ENDIAN_RGBX) {
       uint8_t *image_row = ctx->output_buf;
       assert(NULL != image_row);
@@ -387,15 +377,10 @@ static int _ns_jpeg_output_scanlines(struct NSJpegDecoderCtx *ctx) {
     //suspend = 1;
   }*/
 
-  //free(output_buf);
-
-  //fprintf(stderr, "DEBUG: gckimg: _ns_jpeg_output_scanlines: scanline: %d errorcode: %d\n", ctx->info.output_scanline, ctx->errorcode);
-
   return suspend;
 }
 
 size_t gckimg_ns_jpeg_sizeof(void) {
-  //fprintf(stderr, "DEBUG: gckimg: sizeof: %lu\n", sizeof(struct NSJpegDecoderCtx));
   return sizeof(struct NSJpegDecoderCtx);
 }
 
@@ -405,8 +390,7 @@ void gckimg_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt) {
 
   ctx->info.client_data = ctx;
 
-  /*fprintf(stderr, "DEBUG: gckimg: setup init error handling\n");
-  // We set up the normal JPEG error routines, then override error_exit.
+  /*// We set up the normal JPEG error routines, then override error_exit.
   ctx->info.err = jpeg_std_error(&ctx->err_pub);
   ctx->err_pub.error_exit = my_error_exit;*/
 
@@ -449,9 +433,6 @@ void gckimg_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt) {
 }
 
 void gckimg_ns_jpeg_cleanup(struct NSJpegDecoderCtx *ctx) {
-  //fprintf(stderr, "DEBUG: gckimg: cleanup...\n");
-  //fprintf(stderr, "DEBUG: gckimg: errorcode: %d\n", ctx->errorcode);
-
   // Step 8: release JPEG decompression object.
   ctx->info.src = NULL;
   jpeg_destroy_decompress(&ctx->info);
@@ -478,8 +459,6 @@ void gckimg_ns_jpeg_cleanup(struct NSJpegDecoderCtx *ctx) {
     free(ctx->output_buf);
     ctx->output_buf = NULL;
   }
-
-  //fprintf(stderr, "DEBUG: gckimg: errorcode: %d\n", ctx->errorcode);
 }
 
 void gckimg_ns_jpeg_decode(
@@ -520,7 +499,9 @@ void gckimg_ns_jpeg_decode(
       int exif_orient_code = _ns_jpeg_read_orientation_from_exif(ctx);
       if (exif_orient_code >= 1 && exif_orient_code <= 8) {
         // TODO: not currently handling exif orientation; warn here.
-        fprintf(stderr, "WARNING: gckimg: ignoring exif orientation: %d\n", exif_orient_code);
+        if (exif_orient_code != 1) {
+          fprintf(stderr, "WARNING: gckimg: ignoring exif orientation: %d\n", exif_orient_code);
+        }
       }
       ctx->width = ctx->info.image_width;
       ctx->height = ctx->info.image_height;
@@ -680,7 +661,6 @@ void gckimg_ns_jpeg_decode(
 
     case NS_JPEG_DECOMPRESS_SEQUENTIAL: {
       if (ctx->state == NS_JPEG_DECOMPRESS_SEQUENTIAL) {
-        fprintf(stderr, "DEBUG: gckimg: decompress sequential...\n");
         int suspend = _ns_jpeg_output_scanlines(ctx);
 
         if (suspend) {
@@ -730,7 +710,6 @@ void gckimg_ns_jpeg_decode(
             ctx->info.output_scanline = 0;
           }
 
-          fprintf(stderr, "DEBUG: gckimg: decompress progressive...\n");
           int suspend = _ns_jpeg_output_scanlines(ctx);
 
           if (suspend) {
@@ -769,15 +748,12 @@ void gckimg_ns_jpeg_decode(
 
     case NS_JPEG_DONE: {
       // Step 7: finish decompression.
-      //fprintf(stderr, "DEBUG: gckimg: done...\n");
-      //fprintf(stderr, "DEBUG: gckimg: errorcode: %d\n", ctx->errorcode);
       if (jpeg_finish_decompress(&ctx->info) == FALSE) {
         // TODO: I/O suspension; this shouldn't happen.
         fprintf(stderr, "WARNING: gckimg: I/O suspension; this should not happen\n");
         ctx->errorcode = -1;
         return;
       }
-      //fprintf(stderr, "DEBUG: gckimg: errorcode: %d\n", ctx->errorcode);
       // Make sure we don't feed any more data to libjpeg-turbo.
       ctx->state = NS_JPEG_SINK_NON_JPEG_TRAILER;
       // We're done.
