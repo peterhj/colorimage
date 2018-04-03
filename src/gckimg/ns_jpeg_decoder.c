@@ -268,10 +268,8 @@ static int _ns_jpeg_read_orientation_from_exif(struct NSJpegDecoderCtx *ctx) {
 static int _ns_jpeg_output_scanlines(struct NSJpegDecoderCtx *ctx) {
   int suspend = 0;
 
-  //const uint32_t top = ctx->info.output_scanline;
-
   while (ctx->info.output_scanline < ctx->info.output_height) {
-    if (ctx->info.out_color_space == MOZ_JCS_EXT_NATIVE_ENDIAN_RGBX) {
+    if (ctx->transform == NULL && ctx->info.out_color_space == MOZ_JCS_EXT_NATIVE_ENDIAN_RGBX) {
       uint8_t *image_row = ctx->output_buf;
       assert(NULL != image_row);
 
@@ -299,8 +297,6 @@ static int _ns_jpeg_output_scanlines(struct NSJpegDecoderCtx *ctx) {
       // Put the pixels at end of row to enable in-place expansion
       sample_row += ctx->info.output_width;
     }*/
-
-    //JSAMPROW sample_row = (JSAMPROW)output_buf;
 
     // Request one scanline.  Returns 0 or 1 scanlines.
     if (jpeg_read_scanlines(&ctx->info, &image_row, 1) != 1) {
@@ -370,12 +366,6 @@ static int _ns_jpeg_output_scanlines(struct NSJpegDecoderCtx *ctx) {
       sample_row += 3;
     }*/
   }
-
-  /*if (top != ctx->info.output_scanline) {
-    // TODO: post invalidation (?).
-    fprintf(stderr, "WARNING: gckimg: _ns_jpeg_output_scanlines: post invalidation?\n");
-    //suspend = 1;
-  }*/
 
   return suspend;
 }
