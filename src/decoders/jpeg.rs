@@ -2,7 +2,7 @@ use ::*;
 use color::*;
 use ffi::gckimg::*;
 
-use std::mem::{zeroed};
+use std::mem::{size_of, zeroed};
 
 pub struct NSJpegDecoder {
   ctx:  NSJpegDecoderCtx,
@@ -10,13 +10,13 @@ pub struct NSJpegDecoder {
 
 impl NSJpegDecoder {
   pub fn new(color_mgmt: bool) -> NSJpegDecoder {
-    let mut ctx: NSJpegDecoderCtx = unsafe { zeroed() };
-    NSJpegDecoder{ctx: ctx}
+    NSJpegDecoder{ctx: unsafe { zeroed() }}
   }
 
   pub fn decode<W>(&mut self, buf: &[u8], writer: &mut W) -> Result<(), ()>
   where W: ImageWriter {
     self.ctx = unsafe { zeroed() };
+    assert_eq!(size_of::<NSJpegDecoderCtx>(), unsafe { gckimg_ns_jpeg_sizeof() });
     COLOR_MGMT.with(|cm| {
       let mut cm = cm.borrow_mut();
       unsafe { gckimg_ns_jpeg_init(
@@ -30,8 +30,7 @@ impl NSJpegDecoder {
           (writer as *mut W) as *mut _,
           <W as ImageWriter>::callbacks(),
       ) };
-      unsafe { gckimg_ns_jpeg_cleanup(
-          &mut self.ctx as *mut _) };
+      unsafe { gckimg_ns_jpeg_cleanup(&mut self.ctx as *mut _) };
     });
     match self.ctx.errorcode {
       0 => Ok(()),

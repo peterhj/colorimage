@@ -7,9 +7,12 @@
 struct ImageExifData;
 
 struct ImageWriterCallbacks {
-  void (*init_size)(void *, size_t, size_t, size_t);
-  void (*write_row)(void *, size_t, const uint8_t *, size_t);
-  //void (*write_row_rgbx)(void *, size_t, const uint8_t *, size_t);
+  void (*init_size)(void *, size_t, size_t);
+  //void (*write_row)(void *, size_t, const uint8_t *, size_t);
+  void (*write_row_gray)(void *, size_t, const uint8_t *, size_t);
+  void (*write_row_grayx)(void *, size_t, const uint8_t *, size_t);
+  void (*write_row_rgb)(void *, size_t, const uint8_t *, size_t);
+  void (*write_row_rgbx)(void *, size_t, const uint8_t *, size_t);
   int (*parse_exif)(const uint8_t *, size_t);
 };
 

@@ -19,11 +19,11 @@ struct NSPngDecoderCtx {
   png_infop info;
   uint32_t width;
   uint32_t height;
-  uint32_t depth;
   uint32_t channels;
   qcms_profile *in_profile;
   qcms_transform *transform;
   int pass;
+  uint32_t out_channels;
   uint8_t *cms_line;
   uint8_t *interlace_buf;
   int errorcode;
@@ -33,6 +33,7 @@ struct NSPngDecoderCtx {
   struct ImageWriterCallbacks callbacks;
 };
 
+size_t gckimg_ns_png_sizeof(void);
 void gckimg_ns_png_init(struct NSPngDecoderCtx *ctx, int color_mgmt);
 void gckimg_ns_png_cleanup(struct NSPngDecoderCtx *ctx);
 void gckimg_ns_png_decode(

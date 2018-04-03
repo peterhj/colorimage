@@ -19,11 +19,13 @@
 #include "iccjpeg.h"
 #include "ns_jpeg_decoder.h"
 
-/*#ifdef MOZ_BIG_ENDIAN
-#define MOZ_JCS_EXT_NATIVE_ENDIAN_XRGB JCS_EXT_XRGB
+#ifdef MOZ_BIG_ENDIAN
+//#define MOZ_JCS_EXT_NATIVE_ENDIAN_XRGB JCS_EXT_XRGB
+#define MOZ_JCS_EXT_NATIVE_ENDIAN_RGBX JCS_EXT_XBGR
 #else
-#define MOZ_JCS_EXT_NATIVE_ENDIAN_XRGB JCS_EXT_BGRX
-#endif*/
+//#define MOZ_JCS_EXT_NATIVE_ENDIAN_XRGB JCS_EXT_BGRX
+#define MOZ_JCS_EXT_NATIVE_ENDIAN_RGBX JCS_EXT_RGBX
+#endif
 
 #define MAX_JPEG_MARKER_LENGTH  (((uint32_t)1 << 16) - 1)
 
@@ -266,59 +268,71 @@ static int _ns_jpeg_read_orientation_from_exif(struct NSJpegDecoderCtx *ctx) {
 static int _ns_jpeg_output_scanlines(struct NSJpegDecoderCtx *ctx) {
   int suspend = 0;
 
-  const uint32_t top = ctx->info.output_scanline;
+  //const uint32_t top = ctx->info.output_scanline;
 
-  uint8_t *output_buf = (JSAMPROW)malloc(sizeof(uint8_t) * 16 * ctx->info.output_width);
-  assert(output_buf != NULL);
+  // FIXME: keep this buffer somewhere, where `mImageData` was originally
+  // allocated.
+  //uint8_t *output_buf = (JSAMPROW)malloc(sizeof(uint8_t) * 16 * ctx->info.output_width);
+  //assert(output_buf != NULL);
 
   while (ctx->info.output_scanline < ctx->info.output_height) {
-    /*// TODO: should use `imagebuf` or something else?
-    uint32_t* imageRow = (uint32_t *)(ctx->imagebuf) + (ctx->info.output_scanline * ctx->info.output_width);
+    // TODO: should use `imagebuf` or something else?
+    //uint32_t* image_row = (uint32_t *)(ctx->image_buf) + (ctx->info.output_scanline * ctx->info.output_width);
+    //uint8_t *image_row = ctx->image_buf + (4U * ctx->info.output_scanline * ctx->info.output_width);
+    //assert(image_row != NULL && "Should have a row buffer here");
 
-    //MOZ_ASSERT(imageRow, "Should have a row buffer here");
-    assert(imageRow != NULL && "Should have a row buffer here");*/
+    if (ctx->info.out_color_space == MOZ_JCS_EXT_NATIVE_ENDIAN_RGBX) {
+      uint8_t *image_row = ctx->output_buf;
+      assert(NULL != image_row);
 
-    // TODO: directly read scanlines if RGB format.
-    if (ctx->info.out_color_space == JCS_RGB) {
-      // TODO
-    }
-    /*if (ctx->info.out_color_space == MOZ_JCS_EXT_NATIVE_ENDIAN_XRGB) {
       // Special case: scanline will be directly converted into packed ARGB
-      if (jpeg_read_scanlines(&ctx->info, (JSAMPARRAY)&imageRow, 1) != 1) {
+      if (jpeg_read_scanlines(&ctx->info, (JSAMPARRAY)&image_row, 1) != 1) {
+        fprintf(stderr, "WARNING: gckimg: _ns_jpeg_output_scanlines: suspend I/O (285)\n");
         suspend = 1; // suspend
         break;
       }
+      assert(ctx->info.output_scanline >= 1);
+      ctx->callbacks.write_row_rgbx(
+          ctx->writer,
+          ctx->info.output_scanline - 1,
+          image_row,
+          ctx->info.output_width);
       continue; // all done for this row!
-    }*/
+    }
 
-    /*JSAMPROW sampleRow = (JSAMPROW)imageRow;
-    if (ctx->info.output_components == 3) {
+    uint8_t *image_row = ctx->input_buf;
+    uint8_t *sample_row = ctx->output_buf;
+    assert(NULL != image_row);
+    assert(NULL != sample_row);
+
+    /*if (ctx->info.output_components == 3) {
       // Put the pixels at end of row to enable in-place expansion
-      sampleRow += ctx->info.output_width;
+      sample_row += ctx->info.output_width;
     }*/
 
-    JSAMPROW sampleRow = (JSAMPROW)output_buf;
+    //JSAMPROW sample_row = (JSAMPROW)output_buf;
 
     // Request one scanline.  Returns 0 or 1 scanlines.
-    if (jpeg_read_scanlines(&ctx->info, &sampleRow, 1) != 1) {
+    if (jpeg_read_scanlines(&ctx->info, &image_row, 1) != 1) {
+      fprintf(stderr, "WARNING: gckimg: _ns_jpeg_output_scanlines: suspend I/O (302)\n");
       suspend = 1; // suspend
       break;
     }
 
     if (ctx->transform) {
-      JSAMPROW source = sampleRow;
-      if (ctx->info.out_color_space == JCS_GRAYSCALE) {
+      //JSAMPROW source = sample_row;
+      /*if (ctx->info.out_color_space == JCS_GRAYSCALE) {
         // Convert from the 1byte grey pixels at begin of row
         // to the 3byte RGB byte pixels at 'end' of row
-        sampleRow += ctx->info.output_width;
-      }
-      qcms_transform_data(ctx->transform, source, sampleRow, ctx->info.output_width);
-      /*// Move 3byte RGB data to end of row
-      if (ctx->info.out_color_space == JCS_CMYK) {
-        memmove(sampleRow + ctx->info.output_width,
-                sampleRow,
+        sample_row += ctx->info.output_width;
+      }*/
+      qcms_transform_data(ctx->transform, image_row, sample_row, ctx->info.output_width);
+      /*if (ctx->info.out_color_space == JCS_CMYK) {
+        // Move 3byte RGB data to end of row
+        memmove(sample_row + ctx->info.output_width,
+                sample_row,
                 3 * ctx->info.output_width);
-        sampleRow += ctx->info.output_width;
+        sample_row += ctx->info.output_width;
       }*/
     } else {
       if (ctx->info.out_color_space == JCS_CMYK) {
@@ -327,55 +341,62 @@ static int _ns_jpeg_output_scanlines(struct NSJpegDecoderCtx *ctx) {
         // may wants to do a RGB transform...
         // Would be better to have platform CMSenabled transformation
         // from CMYK to (A)RGB...
-        _cmyk_convert_rgb((JSAMPROW)sampleRow, ctx->info.output_width);
-        sampleRow += ctx->info.output_width;
+        _cmyk_convert_rgb((JSAMPROW)image_row, ctx->info.output_width);
+        sample_row = image_row + ctx->info.output_width;
       }
     }
 
-    // NOTE: Both source and output are RGB order.
     assert(ctx->info.output_scanline >= 1);
-    ctx->callbacks.write_row(
+    ctx->callbacks.write_row_rgb(
         ctx->writer,
         ctx->info.output_scanline - 1,
-        sampleRow,
-        ctx->info.output_width * 3);
+        sample_row,
+        ctx->info.output_width);
 
     /*// counter for while() loops below
     uint32_t idx = ctx->info.output_width;
 
     // copy as bytes until source pointer is 32-bit-aligned
-    //for (; (NS_PTR_TO_UINT32(sampleRow) & 0x3) && idx; --idx) {
-    for (; ((size_t)(sampleRow) & 0x3) && idx; --idx) {
-      *imageRow = gfxPackedPixel(0xFF, sampleRow[0], sampleRow[1], sampleRow[2]);
-      imageRow++;
-      sampleRow += 4;
+    //for (; (NS_PTR_TO_UINT32(sample_row) & 0x3) && idx; --idx) {
+    for (; ((size_t)(sample_row) & 0x3) && idx; --idx) {
+      *image_row = gfxPackedPixel(0xFF, sample_row[0], sample_row[1], sample_row[2]);
+      image_row++;
+      sample_row += 4;
     }
 
     // copy pixels in blocks of 4
     while (idx >= 4) {
-      GFX_BLOCK_RGB_TO_FRGB(sampleRow, imageRow);
+      GFX_BLOCK_RGB_TO_FRGB(sample_row, image_row);
       idx       -=  4;
-      sampleRow += 12;
-      imageRow  +=  4;
+      sample_row += 12;
+      image_row  +=  4;
     }
 
     // copy remaining pixel(s)
     while (idx--) {
       // 32-bit read of final pixel will exceed buffer, so read bytes
-      *imageRow = gfxPackedPixel(0xFF, sampleRow[0], sampleRow[1], sampleRow[2]);
-      imageRow++;
-      sampleRow += 3;
+      *image_row = gfxPackedPixel(0xFF, sample_row[0], sample_row[1], sample_row[2]);
+      image_row++;
+      sample_row += 3;
     }*/
   }
 
-  if (top != ctx->info.output_scanline) {
+  /*if (top != ctx->info.output_scanline) {
     // TODO: post invalidation (?).
-    suspend = 1;
-  }
+    fprintf(stderr, "WARNING: gckimg: _ns_jpeg_output_scanlines: post invalidation?\n");
+    //suspend = 1;
+  }*/
 
-  free(output_buf);
+  //free(output_buf);
+
+  //fprintf(stderr, "DEBUG: gckimg: _ns_jpeg_output_scanlines: scanline: %d errorcode: %d\n", ctx->info.output_scanline, ctx->errorcode);
 
   return suspend;
+}
+
+size_t gckimg_ns_jpeg_sizeof(void) {
+  //fprintf(stderr, "DEBUG: gckimg: sizeof: %lu\n", sizeof(struct NSJpegDecoderCtx));
+  return sizeof(struct NSJpegDecoderCtx);
 }
 
 void gckimg_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt) {
@@ -428,6 +449,9 @@ void gckimg_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt) {
 }
 
 void gckimg_ns_jpeg_cleanup(struct NSJpegDecoderCtx *ctx) {
+  //fprintf(stderr, "DEBUG: gckimg: cleanup...\n");
+  //fprintf(stderr, "DEBUG: gckimg: errorcode: %d\n", ctx->errorcode);
+
   // Step 8: release JPEG decompression object.
   ctx->info.src = NULL;
   jpeg_destroy_decompress(&ctx->info);
@@ -443,6 +467,19 @@ void gckimg_ns_jpeg_cleanup(struct NSJpegDecoderCtx *ctx) {
   if (ctx->in_profile != NULL) {
     qcms_profile_release(ctx->in_profile);
   }
+  ctx->transform = NULL;
+  ctx->in_profile = NULL;
+
+  if (ctx->input_buf != NULL) {
+    free(ctx->input_buf);
+    ctx->input_buf = NULL;
+  }
+  if (ctx->output_buf != NULL) {
+    free(ctx->output_buf);
+    ctx->output_buf = NULL;
+  }
+
+  //fprintf(stderr, "DEBUG: gckimg: errorcode: %d\n", ctx->errorcode);
 }
 
 void gckimg_ns_jpeg_decode(
@@ -487,7 +524,7 @@ void gckimg_ns_jpeg_decode(
       }
       ctx->width = ctx->info.image_width;
       ctx->height = ctx->info.image_height;
-      ctx->callbacks.init_size(ctx->writer, ctx->width, ctx->height, 3);
+      ctx->callbacks.init_size(ctx->writer, ctx->width, ctx->height);
 
       // We're doing a full decode.
       ctx->in_profile = _jpeg_get_icc_profile(&ctx->info);
@@ -522,6 +559,7 @@ void gckimg_ns_jpeg_decode(
             mismatch = 1;
           default:
             // TODO: error.
+            fprintf(stderr, "WARNING: gckimg: unsupported jpeg color space\n");
             ctx->errorcode = -1;
             return;
         }
@@ -537,6 +575,7 @@ void gckimg_ns_jpeg_decode(
               break;
             default:
               // TODO: error.
+              fprintf(stderr, "WARNING: gckimg: unsupported input color space\n");
               ctx->errorcode = -1;
               return;
           }
@@ -575,12 +614,12 @@ void gckimg_ns_jpeg_decode(
           case JCS_GRAYSCALE:
           case JCS_RGB:
           case JCS_YCbCr:
-            /*// if we're not color managing we can decode directly to
+            // if we're not color managing we can decode directly to
             // MOZ_JCS_EXT_NATIVE_ENDIAN_XRGB
-            ctx->info.out_color_space = MOZ_JCS_EXT_NATIVE_ENDIAN_XRGB;
-            ctx->info.out_color_components = 4;*/
-            ctx->info.out_color_space = JCS_RGB;
-            ctx->info.out_color_components = 3;
+            ctx->info.out_color_space = MOZ_JCS_EXT_NATIVE_ENDIAN_RGBX;
+            ctx->info.out_color_components = 4;
+            /*ctx->info.out_color_space = JCS_RGB;
+            ctx->info.out_color_components = 3;*/
             break;
           case JCS_CMYK:
           case JCS_YCCK:
@@ -589,6 +628,7 @@ void gckimg_ns_jpeg_decode(
             break;
           default:
             // TODO: error.
+            fprintf(stderr, "WARNING: gckimg: unsupported output color space\n");
             ctx->errorcode = -1;
             return;
         }
@@ -600,9 +640,14 @@ void gckimg_ns_jpeg_decode(
       ctx->info.buffered_image = jpeg_has_multiple_scans(&ctx->info);
 
       // Used to set up image size so arrays can be allocated
-      // TODO: allocate `imagebuf` here.
       jpeg_calc_output_dimensions(&ctx->info);
-      // TODO
+
+      assert(NULL == ctx->input_buf);
+      assert(NULL == ctx->output_buf);
+      ctx->input_buf = (uint8_t *)malloc(sizeof(uint8_t) * 8U * ctx->width);
+      ctx->output_buf = (uint8_t *)malloc(sizeof(uint8_t) * 8U * ctx->width);
+      assert(NULL != ctx->input_buf);
+      assert(NULL != ctx->output_buf);
 
       ctx->state = NS_JPEG_START_DECOMPRESS;
       // Fallthrough.
@@ -623,6 +668,7 @@ void gckimg_ns_jpeg_decode(
       // Step 5: start decompressor.
       if (jpeg_start_decompress(&ctx->info) == FALSE) {
         // TODO: error.
+        fprintf(stderr, "WARNING: gckimg: error starting decompressor\n");
         ctx->errorcode = -1;
         return;
       }
@@ -634,10 +680,12 @@ void gckimg_ns_jpeg_decode(
 
     case NS_JPEG_DECOMPRESS_SEQUENTIAL: {
       if (ctx->state == NS_JPEG_DECOMPRESS_SEQUENTIAL) {
+        fprintf(stderr, "DEBUG: gckimg: decompress sequential...\n");
         int suspend = _ns_jpeg_output_scanlines(ctx);
 
         if (suspend) {
           // TODO: I/O suspension.
+          fprintf(stderr, "WARNING: gckimg: I/O suspension (646)\n");
           ctx->errorcode = -1;
           return; // I/O suspension
         }
@@ -672,6 +720,7 @@ void gckimg_ns_jpeg_decode(
 
             if (!jpeg_start_output(&ctx->info, scan)) {
               // TODO: I/O suspension.
+              fprintf(stderr, "WARNING: gckimg: I/O suspension (681)\n");
               ctx->errorcode = -1;
               return; // I/O suspension
             }
@@ -681,6 +730,7 @@ void gckimg_ns_jpeg_decode(
             ctx->info.output_scanline = 0;
           }
 
+          fprintf(stderr, "DEBUG: gckimg: decompress progressive...\n");
           int suspend = _ns_jpeg_output_scanlines(ctx);
 
           if (suspend) {
@@ -690,6 +740,7 @@ void gckimg_ns_jpeg_decode(
               ctx->info.output_scanline = 0xffffff;
             }
             // TODO: I/O suspension.
+            fprintf(stderr, "WARNING: gckimg: I/O suspension (700)\n");
             ctx->errorcode = -1;
             return; // I/O suspension
           }
@@ -697,6 +748,7 @@ void gckimg_ns_jpeg_decode(
           if (ctx->info.output_scanline == ctx->info.output_height) {
             if (!jpeg_finish_output(&ctx->info)) {
               // TODO: I/O suspension.
+              fprintf(stderr, "WARNING: gckimg: I/O suspension (708)\n");
               ctx->errorcode = -1;
               return; // I/O suspension
             }
@@ -717,11 +769,15 @@ void gckimg_ns_jpeg_decode(
 
     case NS_JPEG_DONE: {
       // Step 7: finish decompression.
+      //fprintf(stderr, "DEBUG: gckimg: done...\n");
+      //fprintf(stderr, "DEBUG: gckimg: errorcode: %d\n", ctx->errorcode);
       if (jpeg_finish_decompress(&ctx->info) == FALSE) {
         // TODO: I/O suspension; this shouldn't happen.
+        fprintf(stderr, "WARNING: gckimg: I/O suspension; this should not happen\n");
         ctx->errorcode = -1;
         return;
       }
+      //fprintf(stderr, "DEBUG: gckimg: errorcode: %d\n", ctx->errorcode);
       // Make sure we don't feed any more data to libjpeg-turbo.
       ctx->state = NS_JPEG_SINK_NON_JPEG_TRAILER;
       // We're done.

@@ -196,10 +196,9 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
 
   ctx->width = width;
   ctx->height = height;
-  ctx->depth = bit_depth;
 
   // Post our size to the superclass.
-  ctx->callbacks.init_size(ctx->writer, width, height, 3);
+  ctx->callbacks.init_size(ctx->writer, width, height);
 
   // TODO: check size limits.
 
@@ -256,10 +255,12 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
   if (ctx->in_profile != NULL && ctx->color_mgmt) {
     qcms_data_type out_type;
 
-    if (color_type & PNG_COLOR_MASK_ALPHA || num_trans) {
+    if ((color_type & PNG_COLOR_MASK_ALPHA) || num_trans) {
       out_type = QCMS_DATA_RGBA_8;
+      ctx->out_channels = 4;
     } else {
       out_type = QCMS_DATA_RGB_8;
+      ctx->out_channels = 3;
     }
 
     ctx->transform = qcms_transform_create(
@@ -269,6 +270,8 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
         out_type,
         (qcms_intent)(intent));
   } else {
+    ctx->out_channels = 0;
+
     png_set_gray_to_rgb(ctx->png);
 
     // only do gamma correction if CMS isn't entirely disabled
@@ -291,6 +294,9 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
   png_read_update_info(ctx->png, ctx->info);
   channels = png_get_channels(ctx->png, ctx->info);
   ctx->channels = channels;
+  if (0 == ctx->out_channels) {
+    ctx->out_channels = channels;
+  }
 
   //---------------------------------------------------------------//
   // copy PNG info into imagelib structs (formerly png_set_dims()) //
@@ -305,9 +311,11 @@ static void PNGAPI info_callback(png_structp _png, png_infop _info) {
   ctx->pass = 0;
 
   if (ctx->transform && (channels <= 2 || is_interlaced)) {
-    uint32_t bpp[] = { 0, 3, 4, 3, 4 };
+    const uint32_t bpp[] = { 0, 3, 4, 3, 4 };
     assert(channels <= 4);
-    ctx->cms_line = (uint8_t *)(malloc(bpp[channels] * width));
+    const uint32_t cms_channels = bpp[channels];
+    assert(cms_channels == ctx->out_channels);
+    ctx->cms_line = (uint8_t *)(malloc(sizeof(uint8_t) * cms_channels * width));
     if (ctx->cms_line == NULL) {
       png_error(ctx->png, "malloc of mCMSLine failed");
     }
@@ -327,19 +335,19 @@ static void _write_row(struct NSPngDecoderCtx *ctx, uint32_t row_num, uint8_t *r
 
   uint8_t *row_to_write = row;
   const uint32_t width = ctx->width;
-  const uint32_t channels = ctx->channels;
+  const uint32_t out_channels = ctx->out_channels;
 
   // Apply color management to the row, if necessary, before writing it out.
   if (ctx->transform) {
     if (ctx->cms_line != NULL) {
       qcms_transform_data(ctx->transform, row_to_write, ctx->cms_line, width);
 
-      // Copy alpha over.
+      /*// Copy alpha over.
       if (ctx->channels == 2 || ctx->channels == 4) {
         for (uint32_t i = 0; i < width; ++i) {
           ctx->cms_line[4 * i + 3] = row_to_write[channels * i + channels - 1];
         }
-      }
+      }*/
 
       row_to_write = ctx->cms_line;
     } else {
@@ -349,7 +357,23 @@ static void _write_row(struct NSPngDecoderCtx *ctx, uint32_t row_num, uint8_t *r
 
   // Write this row to the SurfacePipe.
   // TODO: packing to the correct pixel format.
-  ctx->callbacks.write_row(ctx->writer, row_num, row_to_write, channels * width);
+  /*ctx->callbacks.write_row(ctx->writer, row_num, row_to_write, out_channels * width);*/
+  switch (out_channels) {
+    case 1: {
+      ctx->callbacks.write_row_gray(ctx->writer, row_num, row_to_write, width);
+    } break;
+    case 2: {
+      ctx->callbacks.write_row_grayx(ctx->writer, row_num, row_to_write, width);
+    } break;
+    case 3: {
+      ctx->callbacks.write_row_rgb(ctx->writer, row_num, row_to_write, width);
+    } break;
+    case 4: {
+      ctx->callbacks.write_row_rgbx(ctx->writer, row_num, row_to_write, width);
+    } break;
+    default:
+      assert(0 && "unimplemented");
+  }
 }
 
 static void PNGAPI row_callback(png_structp _png, png_bytep new_row, png_uint_32 row_num, int pass) {
@@ -426,6 +450,11 @@ static void PNGAPI end_callback(png_structp _png, png_infop _info) {
   // TODO: this is for error checking.
   (void)_png;
   (void)_info;
+}
+
+size_t gckimg_ns_png_sizeof(void) {
+  //fprintf(stderr, "DEBUG: gckimg: gckimg_ns_png_init: sizeof: %lu\n", sizeof(struct NSPngDecoderCtx));
+  return sizeof(struct NSPngDecoderCtx);
 }
 
 void gckimg_ns_png_init(struct NSPngDecoderCtx *ctx, int color_mgmt) {

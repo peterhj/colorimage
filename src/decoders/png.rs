@@ -2,7 +2,7 @@ use ::*;
 use color::*;
 use ffi::gckimg::*;
 
-use std::mem::{zeroed};
+use std::mem::{size_of, zeroed};
 
 pub struct NSPngDecoder {
   ctx:  NSPngDecoderCtx,
@@ -10,14 +10,13 @@ pub struct NSPngDecoder {
 
 impl NSPngDecoder {
   pub fn new(color_mgmt: bool) -> NSPngDecoder {
-    let mut ctx: NSPngDecoderCtx = unsafe { zeroed() };
-    NSPngDecoder{ctx: ctx}
+    NSPngDecoder{ctx: unsafe { zeroed() }}
   }
 
   pub fn decode<W>(&mut self, buf: &[u8], writer: &mut W) -> Result<(), ()>
   where W: ImageWriter + 'static {
-    // TODO: zero out the context memory.
     self.ctx = unsafe { zeroed() };
+    assert_eq!(size_of::<NSPngDecoderCtx>(), unsafe { gckimg_ns_png_sizeof() });
     COLOR_MGMT.with(|cm| {
       let mut cm = cm.borrow_mut();
       unsafe { gckimg_ns_png_init(
@@ -34,7 +33,9 @@ impl NSPngDecoder {
       unsafe { gckimg_ns_png_cleanup(
           &mut self.ctx as *mut _) };
     });
-    // TODO
-    Ok(())
+    match self.ctx.errorcode {
+      0 => Ok(()),
+      _ => Err(()),
+    }
   }
 }

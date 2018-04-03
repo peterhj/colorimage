@@ -9,7 +9,7 @@
 #include "image.h"
 #include "qcms/qcms.h"
 
-#include <setjmp.h>
+//#include <setjmp.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,7 +29,6 @@ typedef enum {
 
 struct NSJpegDecoderCtx {
   struct jpeg_error_mgr err_pub;
-  jmp_buf err_setjmp_buf;
   struct jpeg_decompress_struct info;
   struct jpeg_source_mgr source;
   const JOCTET *segment;
@@ -42,13 +41,13 @@ struct NSJpegDecoderCtx {
   int reading;
   JOCTET *profile;
   uint32_t profile_len;
-  // TODO
-  //uint8_t *imagebuf;
+  uint8_t *input_buf;
+  uint8_t *output_buf;
   uint32_t width;
   uint32_t height;
-  NSJpegState state;
   qcms_profile *in_profile;
   qcms_transform *transform;
+  NSJpegState state;
   int errorcode;
   int color_mgmt;
   struct ColorMgmtCtx *cm;
@@ -56,6 +55,7 @@ struct NSJpegDecoderCtx {
   struct ImageWriterCallbacks callbacks;
 };
 
+size_t gckimg_ns_jpeg_sizeof(void);
 void gckimg_ns_jpeg_init(struct NSJpegDecoderCtx *ctx, int color_mgmt);
 void gckimg_ns_jpeg_cleanup(struct NSJpegDecoderCtx *ctx);
 void gckimg_ns_jpeg_decode(

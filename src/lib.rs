@@ -41,17 +41,19 @@ pub struct ColorImage {
   inner:    Option<PILImage>,
 }
 
-pub unsafe extern "C" fn color_image_init_size(img_p: *mut c_void, width: usize, height: usize, _channels: usize) {
+pub unsafe extern "C" fn color_image_init_size(img_p: *mut c_void, width: usize, height: usize) {
   assert!(!img_p.is_null());
   let mut img = &mut *(img_p as *mut ColorImage);
   img.inner = Some(PILImage::new(PILMode::RGBX, width as _, height as _));
 }
 
-pub unsafe extern "C" fn color_image_write_row(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_size: usize) {
+pub unsafe extern "C" fn color_image_write_row(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
   assert!(!img_p.is_null());
   let mut img = &mut *(img_p as *mut ColorImage);
 
   assert!(!row_buf.is_null());
+  // FIXME
+  let row_size = 3 * row_width;
   let row = from_raw_parts(row_buf, row_size);
 
   assert!(img.inner.is_some());
@@ -63,9 +65,14 @@ pub unsafe extern "C" fn color_image_write_row(img_p: *mut c_void, row_idx: usiz
 impl ImageWriter for ColorImage {
   fn callbacks() -> ImageWriterCallbacks {
     ImageWriterCallbacks{
-      init_size:    Some(color_image_init_size),
-      write_row:    Some(color_image_write_row),
-      parse_exif:   Some(generic_parse_exif),
+      init_size:        Some(color_image_init_size),
+      //write_row:        Some(color_image_write_row),
+      // FIXME
+      write_row_gray:   Some(color_image_write_row),
+      write_row_grayx:  Some(color_image_write_row),
+      write_row_rgb:    Some(color_image_write_row),
+      write_row_rgbx:   Some(color_image_write_row),
+      parse_exif:       Some(generic_parse_exif),
     }
   }
 }
@@ -96,10 +103,11 @@ pub struct RasterImage {
   data:     Vec<Vec<u8>>,
 }
 
-pub unsafe extern "C" fn raster_image_init_size(img_p: *mut c_void, width: usize, height: usize, channels: usize) {
+pub unsafe extern "C" fn raster_image_init_size(img_p: *mut c_void, width: usize, height: usize) {
   //println!("DEBUG: RasterImage: init size: {} {} {}", width, height, channels);
   assert!(!img_p.is_null());
   let mut img = &mut *(img_p as *mut RasterImage);
+  let channels = 3;
   img.width = width;
   img.height = height;
   img.channels = channels;
@@ -113,27 +121,56 @@ pub unsafe extern "C" fn raster_image_init_size(img_p: *mut c_void, width: usize
   }
 }
 
-pub unsafe extern "C" fn raster_image_write_row(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_size: usize) {
+pub unsafe extern "C" fn raster_image_write_row_gray(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
+  unimplemented!();
+}
+
+pub unsafe extern "C" fn raster_image_write_row_grayx(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
+  unimplemented!();
+}
+
+pub unsafe extern "C" fn raster_image_write_row_rgb(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
   //println!("DEBUG: RasterImage: write row: {} {}", row_idx, row_size);
   assert!(!img_p.is_null());
   let mut img = &mut *(img_p as *mut RasterImage);
 
   assert!(!row_buf.is_null());
+  let row_size = 3 * row_width;
   let row = from_raw_parts(row_buf, row_size);
 
-  // TODO: convert pixel format, if necessary.
-  assert_eq!(row_size, img.width * img.channels);
+  assert_eq!(row_width, img.width);
   for i in 0 .. row_size {
     img.data[row_idx][i] = row[i];
+  }
+}
+
+pub unsafe extern "C" fn raster_image_write_row_rgbx(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
+  //println!("DEBUG: RasterImage: write row: {} {}", row_idx, row_size);
+  assert!(!img_p.is_null());
+  let mut img = &mut *(img_p as *mut RasterImage);
+
+  assert!(!row_buf.is_null());
+  let row_size = 4 * row_width;
+  let row = from_raw_parts(row_buf, row_size);
+
+  assert_eq!(row_width, img.width);
+  for x in 0 .. row_width {
+    img.data[row_idx][3 * x]     = row[4 * x];
+    img.data[row_idx][3 * x + 1] = row[4 * x + 1];
+    img.data[row_idx][3 * x + 2] = row[4 * x + 2];
   }
 }
 
 impl ImageWriter for RasterImage {
   fn callbacks() -> ImageWriterCallbacks {
     ImageWriterCallbacks{
-      init_size:    Some(raster_image_init_size),
-      write_row:    Some(raster_image_write_row),
-      parse_exif:   Some(generic_parse_exif),
+      init_size:        Some(raster_image_init_size),
+      //write_row:        Some(raster_image_write_row),
+      write_row_gray:   Some(raster_image_write_row_gray),
+      write_row_grayx:  Some(raster_image_write_row_grayx),
+      write_row_rgb:    Some(raster_image_write_row_rgb),
+      write_row_rgbx:   Some(raster_image_write_row_rgbx),
+      parse_exif:       Some(generic_parse_exif),
     }
   }
 }
