@@ -56,8 +56,8 @@ struct matrix matrix_invert(struct matrix mat)
 {
 	struct matrix dest_mat;
 	int i,j;
-	static int a[3] = { 2, 2, 1 };
-	static int b[3] = { 1, 0, 0 };
+	static const int a[3] = { 2, 2, 1 };
+	static const int b[3] = { 1, 0, 0 };
 
 	/* inv  (A) = 1/det (A) * adj (A) */
 	float det = matrix_det(mat);

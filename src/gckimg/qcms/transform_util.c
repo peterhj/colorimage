@@ -41,8 +41,7 @@ uint16_t lut_interp_linear16(uint16_t input_value, uint16_t *table, int length)
 
 /* same as above but takes an input_value from 0..PRECACHE_OUTPUT_MAX
  * and returns a uint8_t value representing a range from 0..1 */
-static
-uint8_t lut_interp_linear_precache_output(uint32_t input_value, uint16_t *table, int length)
+static uint8_t lut_interp_linear_precache_output(uint32_t input_value, uint16_t *table, int length)
 {
 	/* Start scaling input_value to the length of the array: PRECACHE_OUTPUT_MAX*(length-1).
 	 * We'll divide out the PRECACHE_OUTPUT_MAX next */

@@ -52,7 +52,7 @@
 #include <link.h>
 
 static inline qcms_bool have_altivec() {
-	static int available = -1;
+	static __thread int available = -1;
 	int new_avail = 0;
         ElfW(auxv_t) auxv;
 	ssize_t count;
@@ -90,7 +90,7 @@ out:
  */
 static inline qcms_bool have_altivec() {
 	int sels[2] = {CTL_HW, HW_VECTORUNIT};
-	static int available = -1;
+	static __thread int available = -1;
 	size_t len = sizeof(available);
 	int err;
 
@@ -1061,7 +1061,7 @@ static int sse_version_available(void)
 	 * taken (i.e. OK to optimze away the SSE1 and non-SIMD code */
 	return 2;
 #elif defined(HAS_CPUID)
-	static int sse_version = -1;
+	static __thread int sse_version = -1;
 	uint32_t a, b, c, d;
 	uint32_t function = 0x00000001;
 
