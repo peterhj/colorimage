@@ -615,8 +615,8 @@ void gckimg_ns_jpeg_decode(
 
       assert(NULL == ctx->input_buf);
       assert(NULL == ctx->output_buf);
-      ctx->input_buf = (uint8_t *)malloc(sizeof(uint8_t) * 8U * ctx->width);
-      ctx->output_buf = (uint8_t *)malloc(sizeof(uint8_t) * 8U * ctx->width);
+      ctx->input_buf = (uint8_t *)malloc(sizeof(uint8_t) * 16UL * ctx->info.image_width);
+      ctx->output_buf = (uint8_t *)malloc(sizeof(uint8_t) * 16UL * ctx->info.image_width);
       assert(NULL != ctx->input_buf);
       assert(NULL != ctx->output_buf);
 

@@ -42,6 +42,7 @@ pub struct ColorImage {
 }
 
 pub unsafe extern "C" fn color_image_init_size(img_p: *mut c_void, width: usize, height: usize) {
+  //println!("DEBUG: colorimage: init size: width: {} height: {}", width, height);
   assert!(!img_p.is_null());
   let img = &mut *(img_p as *mut ColorImage);
   img.inner = Some(PILImage::new(PILMode::RGB, width as _, height as _));
@@ -58,6 +59,7 @@ pub unsafe extern "C" fn color_image_write_row_grayx(img_p: *mut c_void, row_idx
 }
 
 pub unsafe extern "C" fn color_image_write_row_rgb(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
+  //println!("DEBUG: colorimage: write row rgb: row idx: {} row width: {}", row_idx, row_width);
   assert!(!img_p.is_null());
   let img = &mut *(img_p as *mut ColorImage);
 
@@ -106,6 +108,21 @@ impl ColorImage {
     ColorImage{inner: None}
   }
 
+  /*pub fn to_vec(&self) -> Vec<u8> {
+    assert!(self.inner.is_some());
+    self.inner.as_ref().unwrap().to_vec()
+  }*/
+
+  pub fn dump_pixels(&self, buf: &mut [u8]) {
+    assert!(self.inner.is_some());
+    self.inner.as_ref().unwrap().dump_pixels(buf);
+  }
+
+  pub fn dump_planes(&self, buf: &mut [u8]) {
+    assert!(self.inner.is_some());
+    self.inner.as_ref().unwrap().dump_planes(buf);
+  }
+
   pub fn width(&self) -> usize {
     assert!(self.inner.is_some());
     self.inner.as_ref().unwrap().width() as _
@@ -114,6 +131,11 @@ impl ColorImage {
   pub fn height(&self) -> usize {
     assert!(self.inner.is_some());
     self.inner.as_ref().unwrap().height() as _
+  }
+
+  pub fn channels(&self) -> usize {
+    assert!(self.inner.is_some());
+    self.inner.as_ref().unwrap().pixel_channels() as _
   }
 
   pub fn resize(&mut self, new_width: usize, new_height: usize) {
