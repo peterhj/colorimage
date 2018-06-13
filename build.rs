@@ -103,7 +103,7 @@ fn main() {
   fs::remove_file(out_dir.join("libgckimg_native_jpeg_simd.a")).ok();
 
   cc::Build::new()
-    .compiler("/opt/yasm/bin/yasm")
+    .compiler("yasm")
     .explicit_flags_only(true)
     .flag("-felf64")
     //.flag("-rnasm")
