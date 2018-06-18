@@ -39,6 +39,7 @@ pub unsafe extern "C" fn generic_parse_exif(exif_buf: *const u8, exif_size: usiz
 
 pub struct ColorImage {
   inner:    Option<PILImage>,
+  // TODO: exif metadata.
 }
 
 pub unsafe extern "C" fn color_image_init_size(img_p: *mut c_void, width: usize, height: usize) {
@@ -106,6 +107,11 @@ impl ImageWriter for ColorImage {
 impl ColorImage {
   pub fn new() -> Self {
     ColorImage{inner: None}
+  }
+
+  pub fn decode(buf: &[u8]) -> Result<Self, ()> {
+    let mut image = ColorImage::new();
+    decode_image(buf, &mut image).and_then(|_| Ok(image))
   }
 
   /*pub fn to_vec(&self) -> Vec<u8> {
