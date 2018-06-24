@@ -262,7 +262,7 @@ static int _ns_jpeg_read_orientation_from_exif(struct NSJpegDecoderCtx *ctx) {
     return 0;
   }
   // TODO: error handling.
-  return (ctx->callbacks.parse_exif)(marker->data, marker->data_length);
+  return (ctx->callbacks.parse_exif)(ctx->writer, marker->data, marker->data_length);
 }
 
 static int _ns_jpeg_output_scanlines(struct NSJpegDecoderCtx *ctx) {
@@ -486,13 +486,14 @@ void gckimg_ns_jpeg_decode(
 
       // Post our size to the superclass.
       // TODO: depends on orientation from exif.
-      int exif_orient_code = _ns_jpeg_read_orientation_from_exif(ctx);
+      _ns_jpeg_read_orientation_from_exif(ctx);
+      /*int exif_orient_code = _ns_jpeg_read_orientation_from_exif(ctx);
       if (exif_orient_code >= 1 && exif_orient_code <= 8) {
         // TODO: not currently handling exif orientation; warn here.
         if (exif_orient_code != 1) {
           fprintf(stderr, "WARNING: gckimg: ignoring exif orientation: %d\n", exif_orient_code);
         }
-      }
+      }*/
       ctx->width = ctx->info.image_width;
       ctx->height = ctx->info.image_height;
       ctx->callbacks.init_size(ctx->writer, ctx->width, ctx->height);

@@ -31,7 +31,7 @@ pub trait ImageWriter {
   fn callbacks() -> ImageWriterCallbacks;
 }
 
-pub unsafe extern "C" fn generic_parse_exif(exif_buf: *const u8, exif_size: usize) -> i32 {
+pub unsafe extern "C" fn generic_parse_exif(img_p: *mut c_void, exif_buf: *const u8, exif_size: usize) -> i32 {
   assert!(!exif_buf.is_null());
   let raw_exif = from_raw_parts(exif_buf, exif_size);
   parse_exif(raw_exif).unwrap_or(0)
@@ -40,6 +40,7 @@ pub unsafe extern "C" fn generic_parse_exif(exif_buf: *const u8, exif_size: usiz
 pub struct ColorImage {
   inner:    Option<PILImage>,
   // TODO: exif metadata.
+  exif_rot: Option<i32>,
 }
 
 pub unsafe extern "C" fn color_image_init_size(img_p: *mut c_void, width: usize, height: usize) {
@@ -91,6 +92,20 @@ pub unsafe extern "C" fn color_image_write_row_rgbx(img_p: *mut c_void, row_idx:
   img.inner.as_mut().unwrap().raster_line_mut(row_idx as _).copy_from_slice(row);
 }
 
+pub unsafe extern "C" fn color_image_parse_exif(img_p: *mut c_void, exif_buf: *const u8, exif_size: usize) -> i32 {
+  assert!(!img_p.is_null());
+  let img = &mut *(img_p as *mut ColorImage);
+  assert!(!exif_buf.is_null());
+  let raw_exif = from_raw_parts(exif_buf, exif_size);
+  let exif_rot = parse_exif(raw_exif).unwrap_or(0);
+  if exif_rot >= 1 && exif_rot <= 8 {
+    img.exif_rot = Some(exif_rot);
+  } else {
+    img.exif_rot = None;
+  }
+  exif_rot
+}
+
 impl ImageWriter for ColorImage {
   fn callbacks() -> ImageWriterCallbacks {
     ImageWriterCallbacks{
@@ -99,19 +114,32 @@ impl ImageWriter for ColorImage {
       write_row_grayx:  Some(color_image_write_row_grayx),
       write_row_rgb:    Some(color_image_write_row_rgb),
       write_row_rgbx:   Some(color_image_write_row_rgbx),
-      parse_exif:       Some(generic_parse_exif),
+      parse_exif:       Some(color_image_parse_exif),
     }
   }
 }
 
 impl ColorImage {
   pub fn new() -> Self {
-    ColorImage{inner: None}
+    ColorImage{
+      inner: None,
+      exif_rot: None,
+    }
   }
 
   pub fn decode(buf: &[u8]) -> Result<Self, ()> {
     let mut image = ColorImage::new();
-    decode_image(buf, &mut image).and_then(|_| Ok(image))
+    decode_image(buf, &mut image)
+      .and_then(|_| match image.exif_rot {
+        None => Ok(image),
+        Some(exif_rot) => {
+          // TODO: rotate or flip the image.
+          if exif_rot != 1 {
+            println!("WARNING: ColorImage: not handling exif orientation code: {}", exif_rot);
+          }
+          Ok(image)
+        }
+      })
   }
 
   /*pub fn to_vec(&self) -> Vec<u8> {
@@ -144,11 +172,20 @@ impl ColorImage {
     self.inner.as_ref().unwrap().pixel_channels() as _
   }
 
+  pub fn crop(&mut self, x: usize, y: usize, new_width: usize, new_height: usize) {
+    // TODO
+    unimplemented!();
+  }
+
   pub fn resize(&mut self, new_width: usize, new_height: usize) {
     assert!(self.inner.is_some());
-    // TODO
-    //self.img.resample(new_width as _, new_height as _, _);
-    unimplemented!();
+    if new_width == self.width() && new_height == self.height() {
+      // Do nothing.
+    } else if new_width <= self.width() && new_height <= self.height() {
+      self.inner = Some(self.inner.as_ref().unwrap().resample(new_width as _, new_height as _, PILFilter::Box_));
+    } else {
+      self.inner = Some(self.inner.as_ref().unwrap().resample(new_width as _, new_height as _, PILFilter::Bicubic));
+    }
   }
 }
 
