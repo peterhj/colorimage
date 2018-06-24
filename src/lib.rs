@@ -178,8 +178,14 @@ impl ColorImage {
   }
 
   pub fn crop(&mut self, x: usize, y: usize, new_width: usize, new_height: usize) {
-    // TODO
-    unimplemented!();
+    // TODO: check bounds.
+    self.inner = Some(self.inner.as_ref().unwrap().crop(x as _, y as _, new_width as _, new_height as _));
+  }
+
+  pub fn flip_left_right(&mut self) {
+    // TODO: check bounds.
+    let new_im = PILImage::new(PILMode::RGB, self.width() as _, self.height() as _);
+    self.inner = Some(self.inner.as_ref().unwrap().flip_left_right(new_im));
   }
 
   pub fn resize(&mut self, new_width: usize, new_height: usize) {
@@ -187,8 +193,10 @@ impl ColorImage {
     if new_width == self.width() && new_height == self.height() {
       // Do nothing.
     } else if new_width <= self.width() && new_height <= self.height() {
+      // TODO: check bounds.
       self.inner = Some(self.inner.as_ref().unwrap().resample(new_width as _, new_height as _, PILFilter::Box_));
     } else {
+      // TODO: check bounds.
       self.inner = Some(self.inner.as_ref().unwrap().resample(new_width as _, new_height as _, PILFilter::Bicubic));
     }
   }
