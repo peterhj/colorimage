@@ -133,13 +133,18 @@ impl ColorImage {
       .and_then(|_| match image.exif_rot {
         None => Ok(image),
         Some(exif_rot) => {
-          // TODO: rotate or flip the image.
-          if exif_rot != 1 {
-            println!("WARNING: ColorImage: not handling exif orientation code: {}", exif_rot);
-          }
           Ok(image)
         }
       })
+  }
+
+  pub fn exif_orientation_code(&self) -> Option<i32> {
+    self.exif_rot
+  }
+
+  pub fn transform_exif_orientation(&mut self) {
+    // TODO: rotate and/or flip the image.
+    unimplemented!();
   }
 
   /*pub fn to_vec(&self) -> Vec<u8> {
