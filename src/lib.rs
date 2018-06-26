@@ -177,9 +177,13 @@ impl ColorImage {
     self.inner.as_ref().unwrap().pixel_channels() as _
   }
 
+  pub fn raster_line(&self, row_idx: usize) -> &[u8] {
+    self.inner.as_ref().unwrap().raster_line(row_idx as _)
+  }
+
   pub fn crop(&mut self, x: usize, y: usize, new_width: usize, new_height: usize) {
     // TODO: check bounds.
-    self.inner = Some(self.inner.as_ref().unwrap().crop(x as _, y as _, new_width as _, new_height as _));
+    self.inner = Some(self.inner.as_ref().unwrap().crop(x as _, y as _, (x + new_width) as _, (y + new_height) as _));
   }
 
   pub fn flip_left_right(&mut self) {
