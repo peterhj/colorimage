@@ -47,7 +47,7 @@ pub unsafe extern "C" fn color_image_init_size(img_p: *mut c_void, width: usize,
   //println!("DEBUG: colorimage: init size: width: {} height: {}", width, height);
   assert!(!img_p.is_null());
   let img = &mut *(img_p as *mut ColorImage);
-  img.inner = Some(PILImage::new(PILMode::RGB, width as _, height as _));
+  img.inner = Some(unsafe { PILImage::new(PILMode::RGB, width as _, height as _) });
 }
 
 pub unsafe extern "C" fn color_image_write_row_gray(img_p: *mut c_void, row_idx: usize, row_buf: *const u8, row_width: usize) {
@@ -188,7 +188,7 @@ impl ColorImage {
 
   pub fn flip_left_right(&mut self) {
     // TODO: check bounds.
-    let new_im = PILImage::new(PILMode::RGB, self.width() as _, self.height() as _);
+    let new_im = unsafe { PILImage::_new_mode(self.inner.as_ref().unwrap()._raw_mode(), self.width() as _, self.height() as _) };
     self.inner = Some(self.inner.as_ref().unwrap().flip_left_right(new_im));
   }
 
